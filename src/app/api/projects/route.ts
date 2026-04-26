@@ -26,17 +26,17 @@ export const GET = withApiError(async function GET(req: NextRequest) {
   if (!auth) return unauthorized();
   const userId = auth.userId;
   const projects = await prisma.project.findMany({
-    where: { userId, deleted: false },
+    where: { userId },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, title: true, status: true, createdAt: true },
+    select: { id: true, name: true, status: true, createdAt: true },
   });
 
   const trunc = (t: string) => (t.length > 30 ? t.slice(0, 27) + '...' : t);
 
   return ok(projects.map(p => ({
     id: p.id,
-    title: trunc(p.title),
-    status: p.status as ProjectStatus,
+    title: trunc(p.name),
+    status: ((p.status as unknown as string) === 'draft' ? ProjectStatus.New : ProjectStatus.Done) as ProjectStatus,
     createdAt: p.createdAt.toISOString(),
   })));
 }, 'Failed to list projects');

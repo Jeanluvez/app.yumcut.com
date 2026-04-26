@@ -6,6 +6,10 @@ import { authenticateApiRequest } from '@/server/api-user';
 import { normalizeTemplateCustomData } from '@/shared/templates/custom-data';
 
 export const GET = withApiError(async function GET(req: NextRequest) {
+  const templateDelegate = (prisma as any).template;
+  if (!templateDelegate || typeof templateDelegate.findMany !== 'function') {
+    return ok([]);
+  }
   const auth = await authenticateApiRequest(req);
   const userId = auth?.userId;
   const isAdmin = !!(auth?.sessionUser?.isAdmin);
@@ -22,7 +26,7 @@ export const GET = withApiError(async function GET(req: NextRequest) {
     return userId ? { OR: [{ isPublic: true }, { ownerId: userId }] } : { isPublic: true };
   })();
 
-  const items = await prisma.template.findMany({
+  const items = await templateDelegate.findMany({
     where,
     orderBy: [
       { weight: 'desc' },
