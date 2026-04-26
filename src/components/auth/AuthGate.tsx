@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useState, type ReactNode } from 'react';
-import { signIn, signOut, useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { Api } from '@/lib/api-client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
+import { useAuthActions, useSession } from '@/lib/auth-client';
 
 const COPY = {
   en: {
@@ -27,15 +28,21 @@ const COPY = {
 
 export function AuthGate() {
   const { status } = useSession();
+  const { signIn, signOut } = useAuthActions();
   const { language } = useAppLanguage();
+  const pathname = usePathname();
   const copy = COPY[language];
   const [show, setShow] = useState(false);
   const [startingProvider, setStartingProvider] = useState<'google' | 'apple' | null>(null);
 
   useEffect(() => {
+    if (pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/sso-callback')) {
+      setShow(false);
+      return;
+    }
     if (status === 'unauthenticated') setShow(true);
     else setShow(false);
-  }, [status]);
+  }, [pathname, status]);
 
   // If we appear authenticated but the DB was reset (user row missing),
   // force-clear the session so the next sign-in starts from scratch.

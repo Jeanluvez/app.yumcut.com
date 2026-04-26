@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Api } from '@/lib/api-client';
 import {
   APP_LANGUAGE_HINT_COOKIE_NAME,
@@ -11,6 +10,7 @@ import {
   type AppLanguageCode,
 } from '@/shared/constants/app-language';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
+import { useSession } from '@/lib/auth-client';
 
 const LANGUAGE_HINT_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 

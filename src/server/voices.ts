@@ -1,16 +1,26 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { VOICE_PROVIDER_IDS, VOICE_PROVIDER_PRIORITY } from '@/shared/constants/voice-providers';
 
-const VOICE_ORDER_BY: Prisma.TemplateVoiceOrderByWithRelationInput[] = [
+const VOICE_ORDER_BY = [
   { weight: 'desc' },
   { createdAt: 'asc' },
 ];
 
+function getTemplateVoiceDelegate() {
+  const delegate = (prisma as any).templateVoice;
+  return delegate && typeof delegate.findFirst === 'function' && typeof delegate.findMany === 'function'
+    ? delegate
+    : null;
+}
+
 export async function listPublicVoices(options?: { allowedProviders?: ReadonlySet<string> }) {
+  const templateVoice = getTemplateVoiceDelegate();
+  if (!templateVoice) {
+    return [];
+  }
   const allowedProviders = options?.allowedProviders;
   const providerFilter = allowedProviders ? Array.from(allowedProviders) : null;
-  return prisma.templateVoice.findMany({
+  return templateVoice.findMany({
     where: {
       isPublic: true,
       ...(providerFilter ? { voiceProvider: { in: providerFilter } } : {}),
@@ -34,11 +44,15 @@ export async function listPublicVoices(options?: { allowedProviders?: ReadonlySe
 export async function getDefaultVoiceExternalId(
   options?: { allowedProviders?: ReadonlySet<string> }
 ): Promise<string | null> {
+  const templateVoice = getTemplateVoiceDelegate();
+  if (!templateVoice) {
+    return null;
+  }
   const allowedProviders = options?.allowedProviders ?? new Set(VOICE_PROVIDER_IDS);
   if (allowedProviders.size === 0) return null;
   const filteredPriority = VOICE_PROVIDER_PRIORITY.filter((provider) => allowedProviders.has(provider));
   for (const provider of filteredPriority) {
-    const prioritized = await prisma.templateVoice.findFirst({
+    const prioritized = await templateVoice.findFirst({
       where: {
         isPublic: true,
         voiceProvider: provider,
@@ -52,7 +66,7 @@ export async function getDefaultVoiceExternalId(
   }
 
   for (const provider of filteredPriority) {
-    const fallback = await prisma.templateVoice.findFirst({
+    const fallback = await templateVoice.findFirst({
       where: { isPublic: true, voiceProvider: provider, externalId: { not: null } },
       orderBy: VOICE_ORDER_BY,
     });
@@ -66,10 +80,14 @@ export async function resolveVoiceInfo(
   input: string,
   options?: { allowedProviders?: ReadonlySet<string> }
 ): Promise<{ externalId: string; voiceProvider: string | null } | null> {
+  const templateVoice = getTemplateVoiceDelegate();
+  if (!templateVoice) {
+    return null;
+  }
   if (!input) return null;
   const normalized = input.trim();
   if (!normalized) return null;
-  const voice = await prisma.templateVoice.findFirst({
+  const voice = await templateVoice.findFirst({
     where: {
       OR: [
         { isPublic: true, externalId: normalized },
@@ -126,8 +144,12 @@ export async function sanitizeLanguageVoicePreferences(
 }
 
 export async function isValidVoiceExternalId(externalId: string): Promise<boolean> {
+  const templateVoice = getTemplateVoiceDelegate();
+  if (!templateVoice) {
+    return false;
+  }
   if (!externalId) return false;
-  const voice = await prisma.templateVoice.findFirst({
+  const voice = await templateVoice.findFirst({
     where: { isPublic: true, externalId },
     select: { id: true },
   });

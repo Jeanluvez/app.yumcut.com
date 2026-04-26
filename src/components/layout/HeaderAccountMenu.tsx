@@ -1,11 +1,11 @@
 "use client";
 import { useState, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { User } from 'lucide-react';
 import { AccountMenuContent } from '@/components/layout/AccountMenuContent';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
+import { useSession } from '@/lib/auth-client';
 
 export function HeaderAccountMenu() {
   const { language } = useAppLanguage();

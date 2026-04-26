@@ -25,6 +25,7 @@ export function CharacterModal({ open, onClose, onSelect, currentSelection }: Ch
   const [uploadOpen, setUploadOpen] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
   const storageBaseUrl = useMemo(resolveStorageBaseUrl, []);
+  const uploadDisabled = !storageBaseUrl;
 
   const { collections, loading, pendingCount, refresh, handleVariationDeleted } = useCharacterCollections(
     open,
@@ -65,7 +66,7 @@ export function CharacterModal({ open, onClose, onSelect, currentSelection }: Ch
                 Select from the library or create your own custom avatar.
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
+                <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)} disabled={uploadDisabled}>
                   <UploadCloud className="mr-2 h-4 w-4" />
                   Upload image
                 </Button>
@@ -127,12 +128,12 @@ export function CharacterModal({ open, onClose, onSelect, currentSelection }: Ch
       </DialogContent>
 
       <UploadCharacterDialog
-        open={uploadOpen}
+        open={uploadOpen && !!storageBaseUrl}
         onOpenChange={setUploadOpen}
         onUploaded={() => {
           void refresh();
         }}
-        storageBaseUrl={storageBaseUrl}
+        storageBaseUrl={storageBaseUrl ?? ''}
       />
 
       <GenerateCharacterDialog

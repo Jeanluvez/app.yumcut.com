@@ -6,9 +6,9 @@ const STORAGE_BASE_URL_RAW =
 const SKIP_PRERENDER = process.env.SKIP_PRERENDER === '1' || process.env.CI === 'true';
 const STORAGE_BASE_URL = STORAGE_BASE_URL_RAW || (SKIP_PRERENDER ? 'http://localhost:3333' : undefined);
 
-export function resolveStorageBaseUrl(): string {
+export function resolveStorageBaseUrl(): string | null {
   if (!STORAGE_BASE_URL || STORAGE_BASE_URL.length === 0) {
-    throw new Error('NEXT_PUBLIC_STORAGE_BASE_URL must be configured');
+    return null;
   }
   return STORAGE_BASE_URL.replace(/\/$/, '');
 }

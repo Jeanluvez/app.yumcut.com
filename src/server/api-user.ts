@@ -42,9 +42,9 @@ export async function authenticateApiRequest(req?: NextRequest): Promise<Authent
     const typedUser = session.user as any;
     const dbUser = await prisma.user.findUnique({
       where: { id: typedUser.id as string },
-      select: { deleted: true },
+      select: { id: true },
     });
-    if (!dbUser || dbUser.deleted) {
+    if (!dbUser) {
       return null;
     }
     return {

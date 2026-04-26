@@ -1,4 +1,0 @@
-ALTER TABLE `ProjectLanguageProgress`
-  ADD COLUMN `disabled` BOOLEAN NOT NULL DEFAULT FALSE,
-  ADD COLUMN `failedStep` VARCHAR(64) NULL,
-  ADD COLUMN `failureReason` VARCHAR(512) NULL;

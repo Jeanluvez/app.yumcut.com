@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Api } from '@/lib/api-client';
 import { StatusIcon } from '@/components/common/StatusIcon';
-import { useSession } from 'next-auth/react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { ChevronRight, PanelLeftOpen, PanelLeftClose, FolderOpen, User } from 'lucide-react';
@@ -14,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 import { AccountMenuContent } from '@/components/layout/AccountMenuContent';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
+import { useSession } from '@/lib/auth-client';
 // Local UI prefs have been removed; rely on server-backed user settings
 
 export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {

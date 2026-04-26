@@ -3,7 +3,6 @@
 import { useState, useTransition } from 'react';
 import { Trash2, TriangleAlert, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Api } from '@/lib/api-client';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
 import type { AppLanguageCode } from '@/shared/constants/app-language';
+import { useAuthActions } from '@/lib/auth-client';
 
 type DeleteAccountCopy = {
   toastDeleted: string;
@@ -71,6 +71,7 @@ const COPY: Record<AppLanguageCode, DeleteAccountCopy> = {
 export function DeleteAccountCard() {
   const { language } = useAppLanguage();
   const copy = COPY[language];
+  const { signOut } = useAuthActions();
   const [reason, setReason] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();

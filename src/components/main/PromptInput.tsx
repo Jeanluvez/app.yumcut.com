@@ -6,7 +6,6 @@ import { SettingsPopover } from './SettingsPopover';
 import { CharacterModal, type CharacterSelection } from './CharacterModal';
 import { VoicePickerDialog } from './VoicePickerDialog';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -58,6 +57,7 @@ import {
   TOOL_PREFILL_MAX_TEXT_CHARS,
   type ToolLandingPrefill,
 } from './helpers';
+import { useSession } from '@/lib/auth-client';
 
 function snapshotToSelection(snapshot: CharacterSelectionSnapshot | null | undefined): CharacterSelection | null {
   if (!snapshot) return null;

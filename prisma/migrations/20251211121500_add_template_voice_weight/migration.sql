@@ -1,2 +1,0 @@
-ALTER TABLE `TemplateVoice`
-  ADD COLUMN `weight` INT NOT NULL DEFAULT 0;

@@ -359,7 +359,7 @@ export default async function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen overflow-hidden` }>
         <UtmSourceTracker />
-        <SessionProviders session={session}>
+        <SessionProviders>
           <AppLanguageProvider initialLanguage={initialAppLanguage} allowStoredOverride={!session?.user}>
             <Suspense fallback={null}>
               <AppLanguageQuerySync />

@@ -1,7 +1,6 @@
 "use client";
 import Link from 'next/link';
 import { useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { PopoverClose } from '@/components/ui/popover';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -11,6 +10,7 @@ import { CONTACT_EMAIL } from '@/shared/constants/app';
 import { Activity, Loader2, LogOut, Mail, Shield, User } from 'lucide-react';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
 import type { AppLanguageCode } from '@/shared/constants/app-language';
+import { useAuthActions, useSession } from '@/lib/auth-client';
 
 type AccountMenuCopy = {
   settings: string;
@@ -62,6 +62,7 @@ export function AccountMenuContent() {
   const { language } = useAppLanguage();
   const t = COPY[language];
   const { data: session } = useSession();
+  const { signOut } = useAuthActions();
   const isAdmin = !!(session?.user as any)?.isAdmin;
   const { loading: tokensLoading, balance: tokenBalance } = useTokenSummary();
   const [signingOut, setSigningOut] = useState(false);
@@ -139,7 +140,6 @@ export function AccountMenuContent() {
                   if (signingOut) return;
                   setSigningOut(true);
                   try {
-                    const { signOut } = await import('next-auth/react');
                     await signOut({ callbackUrl: '/' });
                   } finally {
                     setSigningOut(false);
