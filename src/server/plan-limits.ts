@@ -7,6 +7,12 @@ const MONTHLY_VIDEO_GENERATION_LIMITS: Record<Plan, number> = {
   business: 100,
 };
 
+const STORAGE_LIMIT_BYTES: Record<Plan, bigint> = {
+  free: BigInt(500 * 1024 * 1024),
+  pro: BigInt(10 * 1024 * 1024 * 1024),
+  business: BigInt(50 * 1024 * 1024 * 1024),
+};
+
 function startOfNextMonth(from: Date) {
   return new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 1, 0, 0, 0, 0));
 }
@@ -75,4 +81,43 @@ export async function incrementVideoGenerationCount(userId: string, amount = 1) 
       generationResetAt: true,
     },
   });
+}
+
+export function getStorageLimitBytes(plan: Plan) {
+  return STORAGE_LIMIT_BYTES[plan];
+}
+
+export function formatBytesForHumans(value: bigint) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+export async function getStorageAllowance(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      plan: true,
+      storageUsedBytes: true,
+    },
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  const storageLimitBytes = getStorageLimitBytes(user.plan);
+  const usedBytes = user.storageUsedBytes;
+  const remainingBytes = storageLimitBytes > usedBytes ? storageLimitBytes - usedBytes : BigInt(0);
+
+  return {
+    plan: user.plan,
+    usedBytes,
+    storageLimitBytes,
+    remainingBytes,
+  };
 }

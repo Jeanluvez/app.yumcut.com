@@ -155,11 +155,23 @@ export const Api = {
       body: formData,
     });
     let data: any = null;
+    let text: string | null = null;
     try {
       data = await response.json();
-    } catch {}
+    } catch {
+      try {
+        text = await response.text();
+      } catch {}
+    }
     if (!response.ok) {
-      const message = data?.error?.message || `Request failed with status ${response.status}`;
+      let message = data?.error?.message || (text && text.trim()) || `Request failed with status ${response.status}`;
+      if (data?.error?.code === 'PLAN_LIMIT_EXCEEDED') {
+        message = data?.error?.message || 'Your current plan limit has been reached.';
+      } else if (data?.error?.code === 'VALIDATION_ERROR') {
+        message = data?.error?.message || 'The selected file could not be uploaded.';
+      } else if (response.status >= 500) {
+        message = 'Upload failed on the server. Please try again.';
+      }
       throw { status: response.status, error: { code: data?.error?.code || 'REQUEST_FAILED', message } };
     }
     return data;

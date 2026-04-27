@@ -5,6 +5,7 @@ import { prisma } from '@/server/db';
 import { error, forbidden, ok, unauthorized } from '@/server/http';
 import { withApiError } from '@/server/errors';
 import { uploadFileToSupabaseStorage } from '@/server/supabase-storage';
+import { formatBytesForHumans, getStorageAllowance } from '@/server/plan-limits';
 
 const formSchema = z.object({
   projectId: z.string().uuid(),
@@ -104,6 +105,23 @@ export const POST = withApiError(async function POST(req: NextRequest) {
   });
   if (!user) {
     return unauthorized();
+  }
+
+  const storageAllowance = await getStorageAllowance(auth.userId);
+  const nextUsageBytes = storageAllowance.usedBytes + BigInt(fileValue.size);
+  if (nextUsageBytes > storageAllowance.storageLimitBytes) {
+    return error(
+      'PLAN_LIMIT_EXCEEDED',
+      `${storageAllowance.plan.charAt(0).toUpperCase()}${storageAllowance.plan.slice(1)} plan storage is full. This upload would exceed your ${formatBytesForHumans(storageAllowance.storageLimitBytes)} limit.`,
+      403,
+      {
+        plan: storageAllowance.plan,
+        fileSizeBytes: fileValue.size,
+        usedBytes: storageAllowance.usedBytes.toString(),
+        storageLimitBytes: storageAllowance.storageLimitBytes.toString(),
+        remainingBytes: storageAllowance.remainingBytes.toString(),
+      },
+    );
   }
 
   const safeName = sanitizeFilename(fileValue.name);
