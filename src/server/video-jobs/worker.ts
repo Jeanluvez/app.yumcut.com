@@ -4,6 +4,11 @@ import { synthesizeSpeech } from '@/server/tts';
 import { renderBasicVideoFromAssets } from '@/server/video-renderer';
 
 type ClaimedVideoJob = Awaited<ReturnType<typeof claimNextPendingVideoJob>>;
+type SubtitleEntry = {
+  startSeconds: number;
+  endSeconds: number;
+  text: string;
+};
 
 async function createVoiceoverArtifacts(job: {
   id: string;
@@ -55,7 +60,75 @@ async function createVoiceoverArtifacts(job: {
     audioDurationMs: synthesized.durationMs,
     audioBuffer: synthesized.audioBuffer,
     audioExtension: synthesized.contentType === 'audio/mpeg' ? 'mp3' : 'wav',
+    timestamps: synthesized.timestamps,
   };
+}
+
+function buildSubtitleEntriesFromTimestamps(timestamps: unknown): SubtitleEntry[] {
+  if (!timestamps || typeof timestamps !== 'object') return [];
+
+  const raw = timestamps as {
+    characters?: string[];
+    character_start_times_seconds?: number[];
+    character_end_times_seconds?: number[];
+  };
+
+  if (
+    !Array.isArray(raw.characters) ||
+    !Array.isArray(raw.character_start_times_seconds) ||
+    !Array.isArray(raw.character_end_times_seconds)
+  ) {
+    return [];
+  }
+
+  const joinedText = raw.characters.join('');
+  const words = joinedText
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (words.length === 0) return [];
+
+  const entries: SubtitleEntry[] = [];
+  let charCursor = 0;
+  let wordBuffer: string[] = [];
+  let startSeconds: number | null = null;
+  let endSeconds = 0;
+
+  for (const word of words) {
+    const startIndex = joinedText.indexOf(word, charCursor);
+    if (startIndex < 0) continue;
+    const endIndex = startIndex + word.length - 1;
+    charCursor = endIndex + 1;
+
+    const wordStart = raw.character_start_times_seconds[startIndex];
+    const wordEnd = raw.character_end_times_seconds[endIndex];
+    if (typeof wordStart !== 'number' || typeof wordEnd !== 'number') continue;
+
+    if (startSeconds === null) startSeconds = wordStart;
+    endSeconds = wordEnd;
+    wordBuffer.push(word);
+
+    if (wordBuffer.length >= 5) {
+      entries.push({
+        startSeconds,
+        endSeconds,
+        text: wordBuffer.join(' '),
+      });
+      wordBuffer = [];
+      startSeconds = null;
+    }
+  }
+
+  if (wordBuffer.length > 0 && startSeconds !== null) {
+    entries.push({
+      startSeconds,
+      endSeconds,
+      text: wordBuffer.join(' '),
+    });
+  }
+
+  return entries;
 }
 
 async function resolveRenderAssets(job: {
@@ -266,6 +339,7 @@ export async function markVideoJobDone(jobId: string) {
     audioExtension: voiceoverArtifacts.audioExtension,
     durationSeconds: job.project.durationSeconds,
     aspectRatio: job.project.aspectRatio,
+    subtitleEntries: buildSubtitleEntriesFromTimestamps(voiceoverArtifacts.timestamps),
   });
   const storagePath = `users/${job.project.userId}/projects/${job.projectId}/outputs/${jobId}-final.mp4`;
   const uploadedVideo = await uploadFileToSupabaseStorage({
