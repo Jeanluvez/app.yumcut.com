@@ -90,6 +90,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generatingScripts, setGeneratingScripts] = useState(false);
   const [creatingVideoJobs, setCreatingVideoJobs] = useState(false);
+  const [processingVideoJobs, setProcessingVideoJobs] = useState(false);
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
@@ -128,6 +129,19 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       toast.error(err?.error?.message || 'Failed to create video jobs');
     } finally {
       setCreatingVideoJobs(false);
+    }
+  }
+
+  async function handleProcessVideoJobs() {
+    setProcessingVideoJobs(true);
+    try {
+      await Api.processVideoJobs(projectId);
+      toast.success('Pending jobs processed');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to process video jobs');
+    } finally {
+      setProcessingVideoJobs(false);
     }
   }
 
@@ -270,15 +284,27 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           <CardHeader className="flex-col items-start gap-1">
             <div className="flex w-full items-center justify-between gap-3">
               <CardTitle>Video Jobs</CardTitle>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleCreateVideoJobs}
-                disabled={creatingVideoJobs || project.scripts.length === 0}
-              >
-                {creatingVideoJobs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                {project.videoJobs.length > 0 ? 'Recreate Jobs' : 'Create Video Jobs'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleProcessVideoJobs}
+                  disabled={processingVideoJobs || project.videoJobs.length === 0}
+                >
+                  {processingVideoJobs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Process Pending Jobs
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCreateVideoJobs}
+                  disabled={creatingVideoJobs || project.scripts.length === 0}
+                >
+                  {creatingVideoJobs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {project.videoJobs.length > 0 ? 'Recreate Jobs' : 'Create Video Jobs'}
+                </Button>
+              </div>
             </div>
             <CardDescription>
               {project.videoJobs.length === 0

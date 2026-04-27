@@ -1,7 +1,13 @@
 #!/usr/bin/env tsx
-import 'dotenv/config';
+import path from 'node:path';
+import dotenv from 'dotenv';
 import { inspect } from 'node:util';
 import { PrismaClient } from '@prisma/client';
+
+dotenv.config({
+  path: path.resolve(process.cwd(), '.env.local'),
+  quiet: true,
+});
 
 function sanitizeDatabaseUrl(url: string) {
   return url.replace(/%(?![0-9A-Fa-f]{2})/g, '%25');

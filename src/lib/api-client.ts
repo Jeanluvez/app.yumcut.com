@@ -83,6 +83,12 @@ export const Api = {
       body: JSON.stringify(payload ?? {}),
       errorToastTitle: 'Failed to create video jobs',
     }),
+  processVideoJobs: (id: string) =>
+    api(`/api/projects/${id}/video-jobs/process`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      errorToastTitle: 'Failed to process video jobs',
+    }),
   getAssets: (projectId?: string) => {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
     return api(`/api/assets${qs}`);
