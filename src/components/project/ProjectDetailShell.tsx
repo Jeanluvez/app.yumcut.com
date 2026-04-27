@@ -136,7 +136,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     setProcessingVideoJobs(true);
     try {
       await Api.processVideoJobs(projectId);
-      toast.success('Pending jobs processed');
+      toast.success('Next pending job processed');
       await loadProject();
     } catch (err: any) {
       toast.error(err?.error?.message || 'Failed to process video jobs');
@@ -293,7 +293,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   disabled={processingVideoJobs || project.videoJobs.length === 0}
                 >
                   {processingVideoJobs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Process Pending Jobs
+                  Process Next Job
                 </Button>
                 <Button
                   type="button"

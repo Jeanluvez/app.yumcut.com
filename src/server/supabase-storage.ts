@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 const DEFAULT_STORAGE_BUCKET = 'assets';
 
 function encodeStoragePath(path: string) {
@@ -62,5 +64,25 @@ export async function uploadFileToSupabaseStorage(params: {
   return {
     path: params.path,
     publicUrl: buildSupabasePublicUrl(params.path),
+  };
+}
+
+export async function uploadLocalFileToSupabaseStorage(params: {
+  path: string;
+  localFilePath: string;
+  contentType: string;
+  upsert?: boolean;
+}) {
+  const body = await readFile(params.localFilePath);
+  const result = await uploadFileToSupabaseStorage({
+    path: params.path,
+    contentType: params.contentType,
+    body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+    upsert: params.upsert,
+  });
+
+  return {
+    ...result,
+    sizeBytes: body.byteLength,
   };
 }

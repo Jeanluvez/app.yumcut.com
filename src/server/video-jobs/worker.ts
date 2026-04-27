@@ -1,6 +1,10 @@
+import path from 'node:path';
 import { prisma } from '@/server/db';
+import { uploadLocalFileToSupabaseStorage } from '@/server/supabase-storage';
 
 type ClaimedVideoJob = Awaited<ReturnType<typeof claimNextPendingVideoJob>>;
+
+const DEMO_VIDEO_FILE_PATH = path.resolve(process.cwd(), 'scripts/daemon/assets/video/final-demo.mp4');
 
 export async function claimNextPendingVideoJob(projectId?: string) {
   const candidate = await prisma.videoJob.findFirst({
@@ -142,7 +146,14 @@ export async function markVideoJobDone(jobId: string) {
     throw new Error('Video job not found');
   }
 
-  const finalUrl = `mock://video-jobs/${jobId}/final.mp4`;
+  const storagePath = `users/${job.project.userId}/projects/${job.projectId}/outputs/${jobId}-final.mp4`;
+  const uploadedVideo = await uploadLocalFileToSupabaseStorage({
+    path: storagePath,
+    localFilePath: DEMO_VIDEO_FILE_PATH,
+    contentType: 'video/mp4',
+    upsert: true,
+  });
+  const finalUrl = uploadedVideo.publicUrl;
   const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -169,7 +180,7 @@ export async function markVideoJobDone(jobId: string) {
       update: {
         storageUrl: finalUrl,
         durationSeconds: job.project.durationSeconds,
-        fileSizeBytes: BigInt(0),
+        fileSizeBytes: BigInt(uploadedVideo.sizeBytes),
         variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
         expiresAt,
       },
@@ -179,7 +190,7 @@ export async function markVideoJobDone(jobId: string) {
         projectId: job.projectId,
         storageUrl: finalUrl,
         durationSeconds: job.project.durationSeconds,
-        fileSizeBytes: BigInt(0),
+        fileSizeBytes: BigInt(uploadedVideo.sizeBytes),
         variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
         expiresAt,
       },

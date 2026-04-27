@@ -3,7 +3,7 @@ import { authenticateApiRequest } from '@/server/api-user';
 import { prisma } from '@/server/db';
 import { notFound, ok, unauthorized } from '@/server/http';
 import { withApiError } from '@/server/errors';
-import { processAllPendingVideoJobsForProject } from '@/server/video-jobs/worker';
+import { processNextPendingVideoJob } from '@/server/video-jobs/worker';
 
 type Params = { projectId: string };
 
@@ -18,12 +18,16 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
   });
   if (!project) return notFound('Project not found');
 
-  const processed = await processAllPendingVideoJobsForProject(project.id);
+  const processed = await processNextPendingVideoJob(project.id);
   return ok({
-    processed: processed.map((job) => ({
-      id: job!.id,
-      status: job!.status,
-      variantIndex: job!.variantIndex,
-    })),
+    processed: processed
+      ? [
+          {
+            id: processed.id,
+            status: processed.status,
+            variantIndex: processed.variantIndex,
+          },
+        ]
+      : [],
   });
 }, 'Failed to process video jobs');
