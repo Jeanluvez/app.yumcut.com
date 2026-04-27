@@ -136,9 +136,12 @@ async function resolveRenderAssets(job: {
   projectId: string;
 }) {
   const selectedIds = job.project.selectedAssetIds;
-  const candidateIds = selectedIds.length > 0
-    ? selectedIds
-    : (job.project.hookAssetId ? [job.project.hookAssetId] : []);
+  const candidateIds = Array.from(
+    new Set([
+      ...(job.project.hookAssetId ? [job.project.hookAssetId] : []),
+      ...selectedIds,
+    ]),
+  );
 
   if (candidateIds.length === 0) {
     throw new Error('Project has no source media selected');
@@ -167,13 +170,36 @@ async function resolveRenderAssets(job: {
     .map((id) => assetById.get(id))
     .filter((asset): asset is NonNullable<typeof asset> => !!asset);
 
-  if (orderedSelectedAssets.length > 0) {
-    return orderedSelectedAssets.filter((asset) => asset.type === 'video' || asset.type === 'image');
+  const mainAssets = orderedSelectedAssets.filter((asset) => asset.type === 'video' || asset.type === 'image');
+  const hookAsset = job.project.hookAssetId ? assetById.get(job.project.hookAssetId) ?? null : null;
+
+  if (hookAsset && hookAsset.type === 'hook') {
+    return [
+      {
+        ...hookAsset,
+        role: 'hook' as const,
+      },
+      ...mainAssets.map((asset) => ({
+        ...asset,
+        role: 'main' as const,
+      })),
+    ];
   }
 
-  const hookAsset = job.project.hookAssetId ? assetById.get(job.project.hookAssetId) ?? null : null;
+  if (mainAssets.length > 0) {
+    return mainAssets.map((asset) => ({
+      ...asset,
+      role: 'main' as const,
+    }));
+  }
+
   if (hookAsset) {
-    return [hookAsset];
+    return [
+      {
+        ...hookAsset,
+        role: 'hook' as const,
+      },
+    ];
   }
 
   throw new Error('Selected source asset could not be resolved');
@@ -334,6 +360,7 @@ export async function markVideoJobDone(jobId: string) {
     assets: renderAssets.map((asset) => ({
       assetUrl: asset.storageUrl,
       assetMimeType: asset.mimeType,
+      role: asset.role,
     })),
     audioBuffer: voiceoverArtifacts.audioBuffer,
     audioExtension: voiceoverArtifacts.audioExtension,

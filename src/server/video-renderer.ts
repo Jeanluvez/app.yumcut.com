@@ -5,12 +5,14 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
+const HOOK_SEGMENT_SECONDS = 1.8;
 const IMAGE_SEGMENT_SECONDS = 2.5;
 const VIDEO_SEGMENT_SECONDS = 3;
 
 type RenderAsset = {
   assetUrl: string;
   assetMimeType: string;
+  role?: 'hook' | 'main';
 };
 
 type RenderInput = {
@@ -98,7 +100,12 @@ async function prepareSegment(
 function buildSegmentPlan(assets: RenderAsset[], totalDurationSeconds: number) {
   const basePlan = assets.map((asset) => ({
     asset,
-    durationSeconds: isImageMimeType(asset.assetMimeType) ? IMAGE_SEGMENT_SECONDS : VIDEO_SEGMENT_SECONDS,
+    durationSeconds:
+      asset.role === 'hook'
+        ? HOOK_SEGMENT_SECONDS
+        : isImageMimeType(asset.assetMimeType)
+          ? IMAGE_SEGMENT_SECONDS
+          : VIDEO_SEGMENT_SECONDS,
   }));
 
   const baseTotal = basePlan.reduce((sum, item) => sum + item.durationSeconds, 0);
@@ -112,7 +119,13 @@ function buildSegmentPlan(assets: RenderAsset[], totalDurationSeconds: number) {
 
   let remaining = totalDurationSeconds - baseTotal;
   const targetIndexes = basePlan
-    .map((item, index) => (!isImageMimeType(item.asset.assetMimeType) ? index : -1))
+    .map((item, index) => (
+      item.asset.role === 'hook'
+        ? -1
+        : !isImageMimeType(item.asset.assetMimeType)
+          ? index
+          : -1
+    ))
     .filter((index) => index >= 0);
   const extendIndexes = targetIndexes.length > 0 ? targetIndexes : basePlan.map((_, index) => index);
 
