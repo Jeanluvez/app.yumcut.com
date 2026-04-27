@@ -99,18 +99,27 @@ export function ProjectAssetsSection({
 
   function toggleSelectedAsset(assetId: string, checked: boolean) {
     setDraftSelectedAssetIds((prev) => {
-      if (checked) {
-        return prev.includes(assetId) ? prev : [...prev, assetId];
-      }
-      return prev.filter((id) => id !== assetId);
+      const next = checked
+        ? (prev.includes(assetId) ? prev : [...prev, assetId])
+        : prev.filter((id) => id !== assetId);
+
+      const orderedIds = items
+        .filter((item) => item.type !== 'hook' && next.includes(item.id))
+        .map((item) => item.id);
+
+      return orderedIds;
     });
   }
 
   async function saveSelection() {
     setSavingSelection(true);
     try {
+      const orderedSelectedAssetIds = items
+        .filter((item) => item.type !== 'hook' && draftSelectedAssetIds.includes(item.id))
+        .map((item) => item.id);
+
       await Api.updateProject(projectId, {
-        selectedAssetIds: draftSelectedAssetIds,
+        selectedAssetIds: orderedSelectedAssetIds,
         hookAssetId: draftHookAssetId,
       });
       toast.success('Asset selection saved');

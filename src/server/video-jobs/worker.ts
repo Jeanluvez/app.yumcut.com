@@ -1,7 +1,7 @@
 import { prisma } from '@/server/db';
 import { uploadFileToSupabaseStorage } from '@/server/supabase-storage';
 import { synthesizeSpeech } from '@/server/tts';
-import { renderBasicVideoFromAsset } from '@/server/video-renderer';
+import { renderBasicVideoFromAssets } from '@/server/video-renderer';
 
 type ClaimedVideoJob = Awaited<ReturnType<typeof claimNextPendingVideoJob>>;
 
@@ -58,7 +58,7 @@ async function createVoiceoverArtifacts(job: {
   };
 }
 
-async function resolvePrimaryRenderAsset(job: {
+async function resolveRenderAssets(job: {
   project: { selectedAssetIds: string[]; hookAssetId: string | null; userId: string };
   projectId: string;
 }) {
@@ -89,23 +89,21 @@ async function resolvePrimaryRenderAsset(job: {
     throw new Error('Selected source asset could not be loaded');
   }
 
-  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+  const assetById = new Map(assets.map((asset) => [asset.id, asset] as const));
   const orderedSelectedAssets = selectedIds
     .map((id) => assetById.get(id))
     .filter((asset): asset is NonNullable<typeof asset> => !!asset);
 
-  const preferred =
-    orderedSelectedAssets.find((asset) => asset.type === 'video') ||
-    orderedSelectedAssets.find((asset) => asset.type === 'image') ||
-    (job.project.hookAssetId ? assetById.get(job.project.hookAssetId) ?? null : null) ||
-    orderedSelectedAssets[0] ||
-    assets[0];
-
-  if (!preferred) {
-    throw new Error('Selected source asset could not be resolved');
+  if (orderedSelectedAssets.length > 0) {
+    return orderedSelectedAssets.filter((asset) => asset.type === 'video' || asset.type === 'image');
   }
 
-  return preferred;
+  const hookAsset = job.project.hookAssetId ? assetById.get(job.project.hookAssetId) ?? null : null;
+  if (hookAsset) {
+    return [hookAsset];
+  }
+
+  throw new Error('Selected source asset could not be resolved');
 }
 
 export async function claimNextPendingVideoJob(projectId?: string) {
@@ -258,10 +256,12 @@ export async function markVideoJobDone(jobId: string) {
   }
 
   const voiceoverArtifacts = await createVoiceoverArtifacts(job, job.project.language);
-  const primaryAsset = await resolvePrimaryRenderAsset(job);
-  const renderedVideo = await renderBasicVideoFromAsset({
-    assetUrl: primaryAsset.storageUrl,
-    assetMimeType: primaryAsset.mimeType,
+  const renderAssets = await resolveRenderAssets(job);
+  const renderedVideo = await renderBasicVideoFromAssets({
+    assets: renderAssets.map((asset) => ({
+      assetUrl: asset.storageUrl,
+      assetMimeType: asset.mimeType,
+    })),
     audioBuffer: voiceoverArtifacts.audioBuffer,
     audioExtension: voiceoverArtifacts.audioExtension,
     durationSeconds: job.project.durationSeconds,

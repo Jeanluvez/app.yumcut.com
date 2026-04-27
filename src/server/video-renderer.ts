@@ -5,10 +5,15 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
+const IMAGE_SEGMENT_SECONDS = 1.5;
 
-type RenderInput = {
+type RenderAsset = {
   assetUrl: string;
   assetMimeType: string;
+};
+
+type RenderInput = {
+  assets: RenderAsset[];
   audioBuffer: Buffer;
   audioExtension: string;
   durationSeconds: number;
@@ -42,56 +47,129 @@ async function downloadRemoteFile(url: string) {
   return Buffer.from(await response.arrayBuffer());
 }
 
-export async function renderBasicVideoFromAsset(input: RenderInput) {
+async function prepareSegment(
+  workspace: string,
+  asset: RenderAsset,
+  index: number,
+  clipDurationSeconds: number,
+  width: number,
+  height: number,
+) {
+  const sourceBuffer = await downloadRemoteFile(asset.assetUrl);
+  const sourcePath = path.join(workspace, `source-${index}${getOutputExtensionFromMime(asset.assetMimeType)}`);
+  const segmentPath = path.join(workspace, `segment-${index}.mp4`);
+  await writeFile(sourcePath, sourceBuffer);
+
+  const videoFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`;
+  const ffmpegArgs = isImageMimeType(asset.assetMimeType)
+    ? [
+        '-y',
+        '-loop', '1',
+        '-i', sourcePath,
+        '-t', String(clipDurationSeconds),
+        '-vf', videoFilter,
+        '-an',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        segmentPath,
+      ]
+    : [
+        '-y',
+        '-stream_loop', '-1',
+        '-i', sourcePath,
+        '-t', String(clipDurationSeconds),
+        '-vf', videoFilter,
+        '-an',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        segmentPath,
+      ];
+
+  await execFileAsync('/opt/homebrew/bin/ffmpeg', ffmpegArgs, { maxBuffer: 20 * 1024 * 1024 });
+  return segmentPath;
+}
+
+function buildSegmentDurations(assets: RenderAsset[], totalDurationSeconds: number) {
+  const imageIndexes = assets
+    .map((asset, index) => (isImageMimeType(asset.assetMimeType) ? index : -1))
+    .filter((index) => index >= 0);
+  const videoIndexes = assets
+    .map((asset, index) => (!isImageMimeType(asset.assetMimeType) ? index : -1))
+    .filter((index) => index >= 0);
+
+  if (videoIndexes.length === 0) {
+    const perAsset = Math.max(1, totalDurationSeconds / assets.length);
+    return assets.map(() => perAsset);
+  }
+
+  const reservedForImages = Math.min(totalDurationSeconds, imageIndexes.length * IMAGE_SEGMENT_SECONDS);
+  const remainingForVideos = Math.max(videoIndexes.length, totalDurationSeconds - reservedForImages);
+  const perVideo = remainingForVideos / videoIndexes.length;
+
+  return assets.map((asset) => (isImageMimeType(asset.assetMimeType) ? IMAGE_SEGMENT_SECONDS : perVideo));
+}
+
+export async function renderBasicVideoFromAssets(input: RenderInput) {
+  if (input.assets.length === 0) {
+    throw new Error('At least one asset is required to render video');
+  }
+
   const workspace = await mkdtemp(path.join(os.tmpdir(), 'sprokl-render-'));
   try {
-    const sourceBuffer = await downloadRemoteFile(input.assetUrl);
-    const sourcePath = path.join(workspace, `source${getOutputExtensionFromMime(input.assetMimeType)}`);
-    const audioPath = path.join(workspace, `voiceover.${input.audioExtension}`);
-    const outputPath = path.join(workspace, 'final.mp4');
-
     await mkdir(workspace, { recursive: true });
-    await writeFile(sourcePath, sourceBuffer);
+
+    const audioPath = path.join(workspace, `voiceover.${input.audioExtension}`);
+    const concatListPath = path.join(workspace, 'concat.txt');
+    const mergedVideoPath = path.join(workspace, 'merged.mp4');
+    const outputPath = path.join(workspace, 'final.mp4');
     await writeFile(audioPath, input.audioBuffer);
 
     const { width, height } = getAspectSize(input.aspectRatio);
-    const videoFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`;
+    const segmentDurations = buildSegmentDurations(input.assets, input.durationSeconds);
 
-    const ffmpegArgs = isImageMimeType(input.assetMimeType)
-      ? [
-          '-y',
-          '-loop', '1',
-          '-i', sourcePath,
-          '-i', audioPath,
-          '-t', String(input.durationSeconds),
-          '-map', '0:v:0',
-          '-map', '1:a:0',
-          '-vf', videoFilter,
-          '-c:v', 'libx264',
-          '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac',
-          '-shortest',
-          outputPath,
-        ]
-      : [
-          '-y',
-          '-stream_loop', '-1',
-          '-i', sourcePath,
-          '-i', audioPath,
-          '-t', String(input.durationSeconds),
-          '-map', '0:v:0',
-          '-map', '1:a:0',
-          '-vf', videoFilter,
-          '-c:v', 'libx264',
-          '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac',
-          '-shortest',
-          outputPath,
-        ];
+    const segmentPaths: string[] = [];
+    for (let i = 0; i < input.assets.length; i += 1) {
+      const segmentPath = await prepareSegment(workspace, input.assets[i], i, segmentDurations[i], width, height);
+      segmentPaths.push(segmentPath);
+    }
 
-    await execFileAsync('/opt/homebrew/bin/ffmpeg', ffmpegArgs, { maxBuffer: 20 * 1024 * 1024 });
+    await writeFile(
+      concatListPath,
+      segmentPaths.map((segmentPath) => `file '${segmentPath.replace(/'/g, "'\\''")}'`).join('\n'),
+    );
+
+    await execFileAsync(
+      '/opt/homebrew/bin/ffmpeg',
+      [
+        '-y',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatListPath,
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        mergedVideoPath,
+      ],
+      { maxBuffer: 20 * 1024 * 1024 },
+    );
+
+    await execFileAsync(
+      '/opt/homebrew/bin/ffmpeg',
+      [
+        '-y',
+        '-i', mergedVideoPath,
+        '-i', audioPath,
+        '-t', String(input.durationSeconds),
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-c:v', 'copy',
+        '-af', 'apad',
+        '-c:a', 'aac',
+        outputPath,
+      ],
+      { maxBuffer: 20 * 1024 * 1024 },
+    );
+
     const outputBuffer = await readFile(outputPath);
-
     return {
       outputBuffer,
       contentType: 'video/mp4',
