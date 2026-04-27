@@ -77,6 +77,22 @@ export const Api = {
       body: JSON.stringify(payload ?? {}),
       errorToastTitle: 'Failed to generate scripts',
     }),
+  updateProjectScript: (
+    projectId: string,
+    scriptId: string,
+    payload: {
+      styleLabel: string;
+      hookText: string;
+      bodyText: string;
+      ctaText: string;
+      isSelected: boolean;
+    },
+  ) =>
+    api(`/api/projects/${projectId}/scripts/${scriptId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      errorToastTitle: 'Failed to update script',
+    }),
   createVideoJobs: (id: string, payload?: { overwrite?: boolean }) =>
     api(`/api/projects/${id}/video-jobs/create`, {
       method: 'POST',

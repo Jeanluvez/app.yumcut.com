@@ -76,6 +76,14 @@ export const createSproklProjectSchema = z.object({
   aspectRatio: z.enum(['vertical_9_16', 'square_1_1', 'landscape_16_9']).default('vertical_9_16'),
 });
 
+export const updateProjectScriptSchema = z.object({
+  styleLabel: z.string().trim().min(1, { message: 'Style label is required' }).max(80, { message: 'Style label must be at most 80 characters' }),
+  hookText: z.string().trim().min(10, { message: 'Hook text must be at least 10 characters' }).max(500, { message: 'Hook text must be at most 500 characters' }),
+  bodyText: z.string().trim().min(20, { message: 'Body text must be at least 20 characters' }).max(1200, { message: 'Body text must be at most 1200 characters' }),
+  ctaText: z.string().trim().min(5, { message: 'CTA text must be at least 5 characters' }).max(300, { message: 'CTA text must be at most 300 characters' }),
+  isSelected: z.boolean(),
+});
+
 export const approveScriptSchema = z.union([
   z.object({
     scripts: z

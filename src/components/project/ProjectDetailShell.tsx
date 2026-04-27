@@ -8,6 +8,9 @@ import { Api } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ProjectAssetsSection } from './ProjectAssetsSection';
 
 type ProjectDetail = {
@@ -91,12 +94,33 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [generatingScripts, setGeneratingScripts] = useState(false);
   const [creatingVideoJobs, setCreatingVideoJobs] = useState(false);
   const [processingVideoJobs, setProcessingVideoJobs] = useState(false);
+  const [savingScriptId, setSavingScriptId] = useState<string | null>(null);
+  const [draftScripts, setDraftScripts] = useState<Record<string, {
+    styleLabel: string;
+    hookText: string;
+    bodyText: string;
+    ctaText: string;
+    isSelected: boolean;
+  }>>({});
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
       const result = await Api.getProject(projectId);
       if (signal?.cancelled) return;
       setProject(result as ProjectDetail);
+      const nextDrafts = Object.fromEntries(
+        ((result as ProjectDetail).scripts || []).map((script) => [
+          script.id,
+          {
+            styleLabel: script.styleLabel,
+            hookText: script.hookText,
+            bodyText: script.bodyText,
+            ctaText: script.ctaText,
+            isSelected: script.isSelected,
+          },
+        ]),
+      );
+      setDraftScripts(nextDrafts);
       setLoadError(null);
     } catch (err: any) {
       if (signal?.cancelled) return;
@@ -150,6 +174,47 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     if (status === 'failed') return 'danger';
     if (status === 'pending' || status === 'processing') return 'info';
     return 'default';
+  }
+
+  function updateDraftScript(
+    scriptId: string,
+    patch: Partial<{
+      styleLabel: string;
+      hookText: string;
+      bodyText: string;
+      ctaText: string;
+      isSelected: boolean;
+    }>,
+  ) {
+    setDraftScripts((current) => ({
+      ...current,
+      [scriptId]: {
+        ...(current[scriptId] || {
+          styleLabel: '',
+          hookText: '',
+          bodyText: '',
+          ctaText: '',
+          isSelected: true,
+        }),
+        ...patch,
+      },
+    }));
+  }
+
+  async function handleSaveScript(scriptId: string) {
+    const draft = draftScripts[scriptId];
+    if (!draft) return;
+
+    setSavingScriptId(scriptId);
+    try {
+      await Api.updateProjectScript(projectId, scriptId, draft);
+      toast.success('Script saved');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to update script');
+    } finally {
+      setSavingScriptId(null);
+    }
   }
 
   useEffect(() => {
@@ -265,13 +330,47 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 {project.scripts.map((script) => (
                   <div key={script.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{script.styleLabel || `Variant ${script.sortOrder}`}</div>
-                      <Badge variant={script.isSelected ? 'success' : 'default'}>{script.isSelected ? 'selected' : 'inactive'}</Badge>
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={draftScripts[script.id]?.isSelected ?? script.isSelected}
+                          onCheckedChange={(checked) => updateDraftScript(script.id, { isSelected: checked === true })}
+                        />
+                        <Badge variant={(draftScripts[script.id]?.isSelected ?? script.isSelected) ? 'success' : 'default'}>
+                          {(draftScripts[script.id]?.isSelected ?? script.isSelected) ? 'selected' : 'inactive'}
+                        </Badge>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleSaveScript(script.id)}
+                        disabled={savingScriptId === script.id}
+                      >
+                        {savingScriptId === script.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Save Script
+                      </Button>
                     </div>
-                    <div className="mt-2 space-y-2 text-sm text-gray-600 dark:text-gray-300">
-                      <div>{script.hookText}</div>
-                      <div>{script.bodyText}</div>
-                      <div>{script.ctaText}</div>
+                    <div className="mt-3 grid gap-3">
+                      <Input
+                        value={draftScripts[script.id]?.styleLabel ?? script.styleLabel}
+                        onChange={(event) => updateDraftScript(script.id, { styleLabel: event.target.value })}
+                        placeholder={`Variant ${script.sortOrder}`}
+                      />
+                      <Textarea
+                        value={draftScripts[script.id]?.hookText ?? script.hookText}
+                        onChange={(event) => updateDraftScript(script.id, { hookText: event.target.value })}
+                        className="min-h-[90px]"
+                      />
+                      <Textarea
+                        value={draftScripts[script.id]?.bodyText ?? script.bodyText}
+                        onChange={(event) => updateDraftScript(script.id, { bodyText: event.target.value })}
+                        className="min-h-[130px]"
+                      />
+                      <Textarea
+                        value={draftScripts[script.id]?.ctaText ?? script.ctaText}
+                        onChange={(event) => updateDraftScript(script.id, { ctaText: event.target.value })}
+                        className="min-h-[80px]"
+                      />
                     </div>
                   </div>
                 ))}
