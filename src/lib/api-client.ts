@@ -77,6 +77,12 @@ export const Api = {
       body: JSON.stringify(payload ?? {}),
       errorToastTitle: 'Failed to generate scripts',
     }),
+  createVideoJobs: (id: string, payload?: { overwrite?: boolean }) =>
+    api(`/api/projects/${id}/video-jobs/create`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+      errorToastTitle: 'Failed to create video jobs',
+    }),
   getAssets: (projectId?: string) => {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
     return api(`/api/assets${qs}`);

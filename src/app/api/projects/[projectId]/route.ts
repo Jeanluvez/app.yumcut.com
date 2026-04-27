@@ -62,6 +62,26 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
             createdAt: true,
           },
         },
+        videoJobs: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            scriptId: true,
+            variantIndex: true,
+            status: true,
+            retryCount: true,
+            errorMessage: true,
+            createdAt: true,
+            startedAt: true,
+            completedAt: true,
+            script: {
+              select: {
+                styleLabel: true,
+                sortOrder: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             scripts: true,
@@ -116,6 +136,19 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
       isSelected: script.isSelected,
       sortOrder: script.sortOrder,
       createdAt: script.createdAt.toISOString(),
+    })),
+    videoJobs: project.videoJobs.map((job) => ({
+      id: job.id,
+      scriptId: job.scriptId,
+      variantIndex: job.variantIndex,
+      status: job.status,
+      retryCount: job.retryCount,
+      errorMessage: job.errorMessage,
+      styleLabel: job.script.styleLabel,
+      sortOrder: job.script.sortOrder,
+      createdAt: job.createdAt.toISOString(),
+      startedAt: job.startedAt ? job.startedAt.toISOString() : null,
+      completedAt: job.completedAt ? job.completedAt.toISOString() : null,
     })),
     videos: project.videos.map((video) => ({
       id: video.id,

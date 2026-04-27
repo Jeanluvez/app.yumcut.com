@@ -45,6 +45,19 @@ type ProjectDetail = {
     sortOrder: number;
     createdAt: string;
   }>;
+  videoJobs: Array<{
+    id: string;
+    scriptId: string;
+    variantIndex: number;
+    status: string;
+    retryCount: number;
+    errorMessage: string | null;
+    styleLabel: string;
+    sortOrder: number;
+    createdAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+  }>;
   videos: Array<{
     id: string;
     storageUrl: string;
@@ -76,6 +89,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generatingScripts, setGeneratingScripts] = useState(false);
+  const [creatingVideoJobs, setCreatingVideoJobs] = useState(false);
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
@@ -102,6 +116,26 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     } finally {
       setGeneratingScripts(false);
     }
+  }
+
+  async function handleCreateVideoJobs() {
+    setCreatingVideoJobs(true);
+    try {
+      await Api.createVideoJobs(projectId, { overwrite: true });
+      toast.success('Video jobs created');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to create video jobs');
+    } finally {
+      setCreatingVideoJobs(false);
+    }
+  }
+
+  function jobBadgeVariant(status: string) {
+    if (status === 'done') return 'success';
+    if (status === 'failed') return 'danger';
+    if (status === 'pending' || status === 'processing') return 'info';
+    return 'default';
   }
 
   useEffect(() => {
@@ -224,6 +258,52 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       <div>{script.hookText}</div>
                       <div>{script.bodyText}</div>
                       <div>{script.ctaText}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-col items-start gap-1">
+            <div className="flex w-full items-center justify-between gap-3">
+              <CardTitle>Video Jobs</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleCreateVideoJobs}
+                disabled={creatingVideoJobs || project.scripts.length === 0}
+              >
+                {creatingVideoJobs ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {project.videoJobs.length > 0 ? 'Recreate Jobs' : 'Create Video Jobs'}
+              </Button>
+            </div>
+            <CardDescription>
+              {project.videoJobs.length === 0
+                ? 'Create one queued job per selected script.'
+                : `${project.videoJobs.length} queued jobs prepared for the rendering worker.`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {project.videoJobs.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                Video job creation is ready. The next step is to enqueue one job per selected script.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {project.videoJobs.map((job) => (
+                  <div key={job.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Variant {job.variantIndex}: {job.styleLabel || `Script ${job.sortOrder}`}
+                      </div>
+                      <Badge variant={jobBadgeVariant(job.status)}>{job.status}</Badge>
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Created {new Date(job.createdAt).toLocaleString()}
+                      {job.errorMessage ? ` • ${job.errorMessage}` : ''}
                     </div>
                   </div>
                 ))}
