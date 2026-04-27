@@ -109,6 +109,7 @@ export const Api = {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
     return api(`/api/assets${qs}`);
   },
+  getVideos: () => api('/api/videos'),
   getProjectStatus: (id: string) => api<import('@/shared/types').ProjectStatusDTO>(`/api/projects/${id}/status`),
   getTelegramAccount: () => api<import('@/shared/types').TelegramAccountStatusDTO>('/api/telegram/account'),
   createTelegramLinkToken: () => api<import('@/shared/types').TelegramLinkTokenDTO>('/api/telegram/link-token', { method: 'POST' }),

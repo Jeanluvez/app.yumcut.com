@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { Api } from '@/lib/api-client';
@@ -23,6 +23,20 @@ type FormState = {
   aspectRatio: 'vertical_9_16' | 'square_1_1' | 'landscape_16_9';
 };
 
+type VideoItem = {
+  id: string;
+  variantLabel: string | null;
+  durationSeconds: number;
+  fileSizeBytes: string;
+  downloadCount: number;
+  expiresAt: string;
+  createdAt: string;
+  project: {
+    id: string;
+    name: string;
+  };
+};
+
 const initialForm: FormState = {
   name: '',
   productName: '',
@@ -39,12 +53,39 @@ function formatStatus(status: string | null | undefined) {
   return status.replace(/_/g, ' ');
 }
 
+function formatBytes(value: string) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return 'Unknown size';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function WorkspaceShell() {
   const { items, loading, refresh } = useProjects();
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [videosLoading, setVideosLoading] = useState(true);
 
   const projectCountLabel = useMemo(() => `${items.length} project${items.length === 1 ? '' : 's'}`, [items.length]);
+  const videoCountLabel = useMemo(() => `${videos.length} video${videos.length === 1 ? '' : 's'}`, [videos.length]);
+
+  async function loadVideos() {
+    setVideosLoading(true);
+    try {
+      const result = await Api.getVideos();
+      setVideos(Array.isArray(result) ? (result as VideoItem[]) : []);
+    } catch {
+      setVideos([]);
+    } finally {
+      setVideosLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadVideos();
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,6 +102,7 @@ export function WorkspaceShell() {
       }
       setForm(initialForm);
       refresh();
+      loadVideos();
     } catch (err: any) {
       toast.error(err?.error?.message || 'Failed to create project');
     } finally {
@@ -195,32 +237,79 @@ export function WorkspaceShell() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex-col items-start gap-1">
-            <CardTitle>Recent Projects</CardTitle>
-            <CardDescription>{loading ? 'Loading projects...' : projectCountLabel}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {items.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                No projects yet.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {items.map((item: any) => (
-                  <Link key={item.id} href={`/project/${item.id}`} className="block rounded-lg border border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title || item.name || 'Untitled project'}</div>
-                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      <span>{formatStatus(item.status)}</span>
-                      <span className="mx-2">•</span>
-                      <span>{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown time'}</span>
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader className="flex-col items-start gap-1">
+              <CardTitle>Recent Projects</CardTitle>
+              <CardDescription>{loading ? 'Loading projects...' : projectCountLabel}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {items.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  No projects yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {items.map((item: any) => (
+                    <Link key={item.id} href={`/project/${item.id}`} className="block rounded-lg border border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title || item.name || 'Untitled project'}</div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        <span>{formatStatus(item.status)}</span>
+                        <span className="mx-2">•</span>
+                        <span>{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown time'}</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-col items-start gap-1">
+              <CardTitle>My Videos</CardTitle>
+              <CardDescription>{videosLoading ? 'Loading videos...' : videoCountLabel}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {videos.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  No videos generated yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {videos.map((video) => (
+                    <div key={video.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Link href={`/project/${video.project.id}`} className="text-sm font-medium text-gray-900 hover:underline dark:text-gray-100">
+                            {video.project.name}
+                          </Link>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {video.variantLabel || 'Generated video'}
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {video.durationSeconds}s • {formatBytes(video.fileSizeBytes)} • {new Date(video.createdAt).toLocaleString()}
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Downloads: {video.downloadCount} • Expires {new Date(video.expiresAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <a href={`/api/videos/${video.id}/download`}>Download</a>
+                          </Button>
+                          <Button asChild size="sm" variant="ghost">
+                            <Link href={`/project/${video.project.id}`}>Open</Link>
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
