@@ -67,6 +67,9 @@ type ProjectDetail = {
     thumbnailUrl: string | null;
     variantLabel: string | null;
     durationSeconds: number;
+    fileSizeBytes: string;
+    downloadCount: number;
+    expiresAt: string;
     createdAt: string;
   }>;
 };
@@ -85,6 +88,14 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <div className="text-sm text-gray-900 dark:text-gray-100">{value}</div>
     </div>
   );
+}
+
+function formatBytes(value: string) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return 'Unknown size';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function ProjectDetailShell({ projectId }: { projectId: string }) {
@@ -453,16 +464,24 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   <div key={video.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{video.variantLabel || 'Generated video'}</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {video.durationSeconds}s • {new Date(video.createdAt).toLocaleString()}
+                      {video.durationSeconds}s • {formatBytes(video.fileSizeBytes)} • {new Date(video.createdAt).toLocaleString()}
                     </div>
-                    <a
-                      href={video.storageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-2 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400"
-                    >
-                      Open file
-                    </a>
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Downloads: {video.downloadCount} • Expires {new Date(video.expiresAt).toLocaleDateString()}
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <a href={`/api/videos/${video.id}/download`}>Download</a>
+                      </Button>
+                      <a
+                        href={video.storageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Open source file
+                      </a>
+                    </div>
                   </div>
                 ))}
               </div>
