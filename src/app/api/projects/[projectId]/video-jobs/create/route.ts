@@ -4,6 +4,7 @@ import { authenticateApiRequest } from '@/server/api-user';
 import { prisma } from '@/server/db';
 import { conflict, error, notFound, ok, unauthorized } from '@/server/http';
 import { withApiError } from '@/server/errors';
+import { getVideoGenerationAllowance } from '@/server/plan-limits';
 
 type Params = { projectId: string };
 
@@ -49,6 +50,23 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
 
   if (project.scripts.length === 0) {
     return error('VALIDATION_ERROR', 'Generate and select at least one script first', 400);
+  }
+
+  const allowance = await getVideoGenerationAllowance(auth.userId);
+  if (project.scripts.length > allowance.remaining) {
+    return error(
+      'PLAN_LIMIT_EXCEEDED',
+      `Your ${allowance.plan} plan allows ${allowance.monthlyLimit} video generations per month. You have ${allowance.remaining} remaining this cycle.`,
+      403,
+      {
+        plan: allowance.plan,
+        monthlyLimit: allowance.monthlyLimit,
+        used: allowance.used,
+        remaining: allowance.remaining,
+        resetsAt: allowance.resetsAt.toISOString(),
+        requested: project.scripts.length,
+      },
+    );
   }
 
   const hasSourceMedia = project.selectedAssetIds.length > 0 || !!project.hookAssetId;

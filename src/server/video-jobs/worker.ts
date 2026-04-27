@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db';
+import { incrementVideoGenerationCount } from '@/server/plan-limits';
 import { uploadFileToSupabaseStorage } from '@/server/supabase-storage';
 import { synthesizeSpeech } from '@/server/tts';
 import { renderBasicVideoFromAssets } from '@/server/video-renderer';
@@ -426,6 +427,7 @@ export async function markVideoJobDone(jobId: string) {
     return nextJob;
   });
 
+  await incrementVideoGenerationCount(job.project.userId, 1);
   await updateProjectTerminalStatus(updated.projectId);
   return updated;
 }

@@ -24,17 +24,21 @@ env:
   STRIPE_WEBHOOK_SECRET: placeholder
   SERVICE_API_PASSWORD: placeholder
   DAEMON_API_PASSWORD: placeholder
+  REVIEW_LOGIN_EMAIL: reviewer@example.com
+  REVIEW_LOGIN_PASSWORD: placeholder-review-password
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
@@ -43,4 +47,4 @@ jobs:
         run: npm ci
 
       - name: Build application
-        run: npm run build
+        run: npx next build --webpack
