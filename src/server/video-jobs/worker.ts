@@ -1,10 +1,62 @@
 import path from 'node:path';
 import { prisma } from '@/server/db';
-import { uploadLocalFileToSupabaseStorage } from '@/server/supabase-storage';
+import { uploadFileToSupabaseStorage, uploadLocalFileToSupabaseStorage } from '@/server/supabase-storage';
+import { synthesizeSpeech } from '@/server/tts';
 
 type ClaimedVideoJob = Awaited<ReturnType<typeof claimNextPendingVideoJob>>;
 
 const DEMO_VIDEO_FILE_PATH = path.resolve(process.cwd(), 'scripts/daemon/assets/video/final-demo.mp4');
+
+async function createVoiceoverArtifacts(job: {
+  id: string;
+  projectId: string;
+  project: { userId: string };
+  script: { hookText: string; bodyText: string; ctaText: string };
+}, language: 'en' | 'es') {
+  const text = [job.script.hookText, job.script.bodyText, job.script.ctaText]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n\n');
+
+  const synthesized = await synthesizeSpeech({
+    text,
+    userId: job.project.userId,
+    language,
+  });
+
+  const audioStoragePath = `users/${job.project.userId}/projects/${job.projectId}/voiceovers/${job.id}.mp3`;
+  const uploadedAudio = await uploadFileToSupabaseStorage({
+    path: audioStoragePath,
+    contentType: synthesized.contentType,
+    body: synthesized.audioBuffer.buffer.slice(
+      synthesized.audioBuffer.byteOffset,
+      synthesized.audioBuffer.byteOffset + synthesized.audioBuffer.byteLength,
+    ),
+    upsert: true,
+  });
+
+  let timestampsUrl: string | null = null;
+  if (synthesized.timestamps) {
+    const timestampsStoragePath = `users/${job.project.userId}/projects/${job.projectId}/voiceovers/${job.id}-timestamps.json`;
+    const timestampsBuffer = Buffer.from(JSON.stringify(synthesized.timestamps, null, 2));
+    const uploadedTimestamps = await uploadFileToSupabaseStorage({
+      path: timestampsStoragePath,
+      contentType: 'application/json',
+      body: timestampsBuffer.buffer.slice(
+        timestampsBuffer.byteOffset,
+        timestampsBuffer.byteOffset + timestampsBuffer.byteLength,
+      ),
+      upsert: true,
+    });
+    timestampsUrl = uploadedTimestamps.publicUrl;
+  }
+
+  return {
+    voiceoverUrl: uploadedAudio.publicUrl,
+    ttsTimestampsUrl: timestampsUrl,
+    audioDurationMs: synthesized.durationMs,
+  };
+}
 
 export async function claimNextPendingVideoJob(projectId?: string) {
   const candidate = await prisma.videoJob.findFirst({
@@ -133,11 +185,15 @@ export async function markVideoJobDone(jobId: string) {
         select: {
           userId: true,
           durationSeconds: true,
+          language: true,
         },
       },
       script: {
         select: {
           styleLabel: true,
+          hookText: true,
+          bodyText: true,
+          ctaText: true,
         },
       },
     },
@@ -146,6 +202,7 @@ export async function markVideoJobDone(jobId: string) {
     throw new Error('Video job not found');
   }
 
+  const voiceoverArtifacts = await createVoiceoverArtifacts(job, job.project.language);
   const storagePath = `users/${job.project.userId}/projects/${job.projectId}/outputs/${jobId}-final.mp4`;
   const uploadedVideo = await uploadLocalFileToSupabaseStorage({
     path: storagePath,
@@ -163,6 +220,8 @@ export async function markVideoJobDone(jobId: string) {
         status: 'done',
         completedAt: now,
         errorMessage: null,
+        voiceoverUrl: voiceoverArtifacts.voiceoverUrl,
+        ttsTimestampsUrl: voiceoverArtifacts.ttsTimestampsUrl,
         finalUrl,
       },
       select: {

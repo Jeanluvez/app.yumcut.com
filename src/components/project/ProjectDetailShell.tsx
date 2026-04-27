@@ -55,6 +55,9 @@ type ProjectDetail = {
     status: string;
     retryCount: number;
     errorMessage: string | null;
+    voiceoverUrl: string | null;
+    ttsTimestampsUrl: string | null;
+    finalUrl: string | null;
     styleLabel: string;
     sortOrder: number;
     createdAt: string;
@@ -441,6 +444,25 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       Created {new Date(job.createdAt).toLocaleString()}
                       {job.errorMessage ? ` • ${job.errorMessage}` : ''}
                     </div>
+                    {(job.voiceoverUrl || job.ttsTimestampsUrl || job.finalUrl) ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                        {job.voiceoverUrl ? (
+                          <a href={job.voiceoverUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                            Voiceover
+                          </a>
+                        ) : null}
+                        {job.ttsTimestampsUrl ? (
+                          <a href={job.ttsTimestampsUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                            Timestamps
+                          </a>
+                        ) : null}
+                        {job.finalUrl ? (
+                          <a href={job.finalUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                            Final Output
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
