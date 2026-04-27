@@ -11,59 +11,67 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
   if (!auth) return unauthorized();
 
   const { projectId } = await params;
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, userId: auth.userId },
-    select: {
-      id: true,
-      userId: true,
-      name: true,
-      productName: true,
-      productDescription: true,
-      sellingPoints: true,
-      targetAudience: true,
-      promoEnabled: true,
-      promoInfo: true,
-      selectedAssetIds: true,
-      hookAssetId: true,
-      durationSeconds: true,
-      aspectRatio: true,
-      language: true,
-      status: true,
-      createdAt: true,
-      updatedAt: true,
-      scripts: {
-        orderBy: { sortOrder: 'asc' },
-        select: {
-          id: true,
-          styleLabel: true,
-          hookText: true,
-          bodyText: true,
-          ctaText: true,
-          isSelected: true,
-          sortOrder: true,
-          createdAt: true,
+  const [project, assetCount] = await Promise.all([
+    prisma.project.findFirst({
+      where: { id: projectId, userId: auth.userId },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        productName: true,
+        productDescription: true,
+        sellingPoints: true,
+        targetAudience: true,
+        promoEnabled: true,
+        promoInfo: true,
+        selectedAssetIds: true,
+        hookAssetId: true,
+        durationSeconds: true,
+        aspectRatio: true,
+        language: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        scripts: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            styleLabel: true,
+            hookText: true,
+            bodyText: true,
+            ctaText: true,
+            isSelected: true,
+            sortOrder: true,
+            createdAt: true,
+          },
+        },
+        videos: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            storageUrl: true,
+            thumbnailUrl: true,
+            variantLabel: true,
+            durationSeconds: true,
+            createdAt: true,
+          },
+        },
+        _count: {
+          select: {
+            scripts: true,
+            videoJobs: true,
+            videos: true,
+          },
         },
       },
-      videos: {
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          storageUrl: true,
-          thumbnailUrl: true,
-          variantLabel: true,
-          durationSeconds: true,
-          createdAt: true,
-        },
+    }),
+    prisma.asset.count({
+      where: {
+        userId: auth.userId,
+        projectId,
       },
-      _count: {
-        select: {
-          scripts: true,
-          videoJobs: true,
-          videos: true,
-        },
-      },
-    },
-  });
+    }),
+  ]);
 
   if (!project) return notFound('Project not found');
 
@@ -87,7 +95,7 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
     counts: {
-      assets: project.selectedAssetIds.length,
+      assets: assetCount,
       scripts: project._count.scripts,
       videoJobs: project._count.videoJobs,
       videos: project._count.videos,

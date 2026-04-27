@@ -6,6 +6,7 @@ import { Api } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ProjectAssetsSection } from './ProjectAssetsSection';
 
 type ProjectDetail = {
   id: string;
@@ -72,23 +73,25 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  async function loadProject(signal?: { cancelled: boolean }) {
+    try {
+      const result = await Api.getProject(projectId);
+      if (signal?.cancelled) return;
+      setProject(result as ProjectDetail);
+      setLoadError(null);
+    } catch (err: any) {
+      if (signal?.cancelled) return;
+      setLoadError(err?.error?.message || 'Failed to load project');
+    } finally {
+      if (!signal?.cancelled) setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    let mounted = true;
-    Api.getProject(projectId)
-      .then((result) => {
-        if (!mounted) return;
-        setProject(result as ProjectDetail);
-        setLoadError(null);
-      })
-      .catch((err: any) => {
-        if (!mounted) return;
-        setLoadError(err?.error?.message || 'Failed to load project');
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+    const signal = { cancelled: false };
+    loadProject(signal);
     return () => {
-      mounted = false;
+      signal.cancelled = true;
     };
   }, [projectId]);
 
@@ -168,6 +171,8 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <ProjectAssetsSection projectId={projectId} onChanged={() => loadProject()} />
+
         <Card>
           <CardHeader className="flex-col items-start gap-1">
             <CardTitle>Scripts</CardTitle>

@@ -65,6 +65,10 @@ export const Api = {
   }),
   getProjects: () => api('/api/projects'),
   getProject: (id: string) => api(`/api/projects/${id}`),
+  getAssets: (projectId?: string) => {
+    const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+    return api(`/api/assets${qs}`);
+  },
   getProjectStatus: (id: string) => api<import('@/shared/types').ProjectStatusDTO>(`/api/projects/${id}/status`),
   getTelegramAccount: () => api<import('@/shared/types').TelegramAccountStatusDTO>('/api/telegram/account'),
   createTelegramLinkToken: () => api<import('@/shared/types').TelegramLinkTokenDTO>('/api/telegram/link-token', { method: 'POST' }),
@@ -100,6 +104,25 @@ export const Api = {
     }),
   deleteProject: (id: string) => api(`/api/projects/${id}`, { method: 'DELETE' }),
   createProject: (payload: any) => api<import('@/shared/types').ProjectListItemDTO>('/api/projects', { method: 'POST', body: JSON.stringify(payload) }),
+  uploadAsset: async (projectId: string, file: File, assetType: 'image' | 'video' | 'hook') => {
+    const formData = new FormData();
+    formData.set('projectId', projectId);
+    formData.set('assetType', assetType);
+    formData.set('file', file);
+    const response = await fetch('/api/assets/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {}
+    if (!response.ok) {
+      const message = data?.error?.message || `Request failed with status ${response.status}`;
+      throw { status: response.status, error: { code: data?.error?.code || 'REQUEST_FAILED', message } };
+    }
+    return data;
+  },
   // Groups API
   createGroup: (payload: any) => api<{ id: string }>('/api/groups', { method: 'POST', body: JSON.stringify(payload) }),
   stopProject: (id: string) => api(`/api/projects/${id}/stop`, { method: 'POST' }),
