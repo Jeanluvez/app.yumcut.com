@@ -43,6 +43,21 @@ export const GET = withApiError(async function GET(req: NextRequest) {
     },
   });
 
+  const projectIds = Array.from(new Set(items.map((item) => item.projectId).filter((id): id is string => !!id)));
+  const projects = projectIds.length > 0
+    ? await prisma.project.findMany({
+        where: {
+          id: { in: projectIds },
+          userId: auth.userId,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      })
+    : [];
+  const projectById = new Map(projects.map((project) => [project.id, project] as const));
+
   return ok(items.map((item) => ({
     id: item.id,
     projectId: item.projectId,
@@ -57,5 +72,16 @@ export const GET = withApiError(async function GET(req: NextRequest) {
     height: item.height,
     expiresAt: item.expiresAt.toISOString(),
     createdAt: item.createdAt.toISOString(),
+    project: item.projectId
+      ? (() => {
+          const project = projectById.get(item.projectId);
+          return project
+            ? {
+                id: project.id,
+                name: project.name,
+              }
+            : null;
+        })()
+      : null,
   })));
 }, 'Failed to list assets');

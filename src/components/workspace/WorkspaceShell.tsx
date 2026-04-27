@@ -37,6 +37,26 @@ type VideoItem = {
   };
 };
 
+type AssetItem = {
+  id: string;
+  projectId: string | null;
+  type: string;
+  filename: string;
+  storageUrl: string;
+  thumbnailUrl: string | null;
+  sizeBytes: string;
+  mimeType: string;
+  durationSeconds?: number | null;
+  width?: number | null;
+  height?: number | null;
+  expiresAt: string;
+  createdAt: string;
+  project: {
+    id: string;
+    name: string;
+  } | null;
+};
+
 const initialForm: FormState = {
   name: '',
   productName: '',
@@ -67,9 +87,20 @@ export function WorkspaceShell() {
   const [submitting, setSubmitting] = useState(false);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [videosLoading, setVideosLoading] = useState(true);
+  const [assets, setAssets] = useState<AssetItem[]>([]);
+  const [assetsLoading, setAssetsLoading] = useState(true);
+  const [assetFilter, setAssetFilter] = useState<'all' | 'image' | 'video' | 'hook'>('all');
 
   const projectCountLabel = useMemo(() => `${items.length} project${items.length === 1 ? '' : 's'}`, [items.length]);
   const videoCountLabel = useMemo(() => `${videos.length} video${videos.length === 1 ? '' : 's'}`, [videos.length]);
+  const filteredAssets = useMemo(
+    () => (assetFilter === 'all' ? assets : assets.filter((asset) => asset.type === assetFilter)),
+    [assets, assetFilter],
+  );
+  const assetCountLabel = useMemo(
+    () => `${filteredAssets.length} asset${filteredAssets.length === 1 ? '' : 's'}`,
+    [filteredAssets.length],
+  );
 
   async function loadVideos() {
     setVideosLoading(true);
@@ -83,8 +114,21 @@ export function WorkspaceShell() {
     }
   }
 
+  async function loadAssets() {
+    setAssetsLoading(true);
+    try {
+      const result = await Api.getAssets();
+      setAssets(Array.isArray(result) ? (result as AssetItem[]) : []);
+    } catch {
+      setAssets([]);
+    } finally {
+      setAssetsLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadVideos();
+    loadAssets();
   }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -103,6 +147,7 @@ export function WorkspaceShell() {
       setForm(initialForm);
       refresh();
       loadVideos();
+      loadAssets();
     } catch (err: any) {
       toast.error(err?.error?.message || 'Failed to create project');
     } finally {
@@ -117,7 +162,7 @@ export function WorkspaceShell() {
         <p className="text-sm text-gray-500 dark:text-gray-400">Create a project record first. Script generation and assets come next.</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <Card>
           <CardHeader className="flex-col items-start gap-1">
             <CardTitle>New Project</CardTitle>
@@ -237,7 +282,7 @@ export function WorkspaceShell() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6">
+        <div className="grid min-w-0 gap-6">
           <Card>
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>Recent Projects</CardTitle>
@@ -251,7 +296,7 @@ export function WorkspaceShell() {
               ) : (
                 <div className="space-y-3">
                   {items.map((item: any) => (
-                    <Link key={item.id} href={`/project/${item.id}`} className="block rounded-lg border border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900">
+                    <Link key={item.id} href={`/project/${item.id}`} className="block min-w-0 rounded-lg border border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900">
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title || item.name || 'Untitled project'}</div>
                       <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         <span>{formatStatus(item.status)}</span>
@@ -278,13 +323,13 @@ export function WorkspaceShell() {
               ) : (
                 <div className="space-y-3">
                   {videos.map((video) => (
-                    <div key={video.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                    <div key={video.id} className="min-w-0 rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
                           <Link href={`/project/${video.project.id}`} className="text-sm font-medium text-gray-900 hover:underline dark:text-gray-100">
                             {video.project.name}
                           </Link>
-                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          <div className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                             {video.variantLabel || 'Generated video'}
                           </div>
                           <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -294,13 +339,81 @@ export function WorkspaceShell() {
                             Downloads: {video.downloadCount} • Expires {new Date(video.expiresAt).toLocaleDateString()}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
                           <Button asChild size="sm" variant="outline">
                             <a href={`/api/videos/${video.id}/download`}>Download</a>
                           </Button>
                           <Button asChild size="sm" variant="ghost">
                             <Link href={`/project/${video.project.id}`}>Open</Link>
                           </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-col items-start gap-3">
+              <div>
+                <CardTitle>My Assets</CardTitle>
+                <CardDescription>{assetsLoading ? 'Loading assets...' : assetCountLabel}</CardDescription>
+              </div>
+              <div className="w-full max-w-[180px]">
+                <Select value={assetFilter} onValueChange={(value: 'all' | 'image' | 'video' | 'hook') => setAssetFilter(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter assets" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    <SelectItem value="image">Images</SelectItem>
+                    <SelectItem value="video">Videos</SelectItem>
+                    <SelectItem value="hook">Hook videos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredAssets.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  No assets found for this filter.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredAssets.map((asset) => (
+                    <div key={asset.id} className="min-w-0 rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{asset.filename}</div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {asset.type} • {formatBytes(asset.sizeBytes)} • {new Date(asset.createdAt).toLocaleString()}
+                          </div>
+                          <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
+                            {asset.project ? (
+                              <>
+                                Project:{' '}
+                                <Link href={`/project/${asset.project.id}`} className="hover:underline">
+                                  {asset.project.name}
+                                </Link>
+                              </>
+                            ) : (
+                              'No project'
+                            )}
+                            <span className="mx-2">•</span>
+                            Expires {new Date(asset.expiresAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <a href={asset.storageUrl} target="_blank" rel="noreferrer">Open</a>
+                          </Button>
+                          {asset.project ? (
+                            <Button asChild size="sm" variant="ghost">
+                              <Link href={`/project/${asset.project.id}`}>Project</Link>
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                     </div>
