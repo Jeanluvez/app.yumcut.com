@@ -71,6 +71,12 @@ export const Api = {
       body: JSON.stringify(payload),
       errorToastTitle: 'Failed to update project',
     }),
+  generateProjectScripts: (id: string, payload?: { overwrite?: boolean }) =>
+    api(`/api/projects/${id}/scripts/generate`, {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+      errorToastTitle: 'Failed to generate scripts',
+    }),
   getAssets: (projectId?: string) => {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
     return api(`/api/assets${qs}`);

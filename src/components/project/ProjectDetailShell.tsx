@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Api } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -73,6 +75,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [generatingScripts, setGeneratingScripts] = useState(false);
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
@@ -85,6 +88,19 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       setLoadError(err?.error?.message || 'Failed to load project');
     } finally {
       if (!signal?.cancelled) setLoading(false);
+    }
+  }
+
+  async function handleGenerateScripts() {
+    setGeneratingScripts(true);
+    try {
+      await Api.generateProjectScripts(projectId, { overwrite: true });
+      toast.success('Scripts generated');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to generate scripts');
+    } finally {
+      setGeneratingScripts(false);
     }
   }
 
@@ -182,7 +198,13 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
 
         <Card>
           <CardHeader className="flex-col items-start gap-1">
-            <CardTitle>Scripts</CardTitle>
+            <div className="flex w-full items-center justify-between gap-3">
+              <CardTitle>Scripts</CardTitle>
+              <Button type="button" size="sm" onClick={handleGenerateScripts} disabled={generatingScripts}>
+                {generatingScripts ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {project.scripts.length > 0 ? 'Regenerate Scripts' : 'Generate Scripts'}
+              </Button>
+            </div>
             <CardDescription>{project.scripts.length === 0 ? 'No scripts generated yet.' : `${project.scripts.length} script variants saved.`}</CardDescription>
           </CardHeader>
           <CardContent>
