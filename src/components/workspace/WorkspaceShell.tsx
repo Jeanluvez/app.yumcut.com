@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { Api } from '@/lib/api-client';
 import { useProjects } from '@/components/providers/ProjectsProvider';
@@ -207,14 +208,14 @@ export function WorkspaceShell() {
             ) : (
               <div className="space-y-3">
                 {items.map((item: any) => (
-                  <div key={item.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                  <Link key={item.id} href={`/project/${item.id}`} className="block rounded-lg border border-gray-200 px-4 py-3 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900">
                     <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title || item.name || 'Untitled project'}</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       <span>{formatStatus(item.status)}</span>
                       <span className="mx-2">•</span>
                       <span>{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Unknown time'}</span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
