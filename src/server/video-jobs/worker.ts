@@ -117,26 +117,79 @@ async function updateProjectTerminalStatus(projectId: string) {
 }
 
 export async function markVideoJobDone(jobId: string) {
-  const job = await prisma.videoJob.update({
+  const now = new Date();
+  const job = await prisma.videoJob.findUnique({
     where: { id: jobId },
-    data: {
-      status: 'done',
-      completedAt: new Date(),
-      errorMessage: null,
-      finalUrl: `mock://video-jobs/${jobId}/final.mp4`,
-    },
     select: {
       id: true,
       projectId: true,
+      scriptId: true,
       variantIndex: true,
-      status: true,
-      finalUrl: true,
-      completedAt: true,
+      project: {
+        select: {
+          userId: true,
+          durationSeconds: true,
+        },
+      },
+      script: {
+        select: {
+          styleLabel: true,
+        },
+      },
     },
   });
+  if (!job) {
+    throw new Error('Video job not found');
+  }
 
-  await updateProjectTerminalStatus(job.projectId);
-  return job;
+  const finalUrl = `mock://video-jobs/${jobId}/final.mp4`;
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const nextJob = await tx.videoJob.update({
+      where: { id: jobId },
+      data: {
+        status: 'done',
+        completedAt: now,
+        errorMessage: null,
+        finalUrl,
+      },
+      select: {
+        id: true,
+        projectId: true,
+        variantIndex: true,
+        status: true,
+        finalUrl: true,
+        completedAt: true,
+      },
+    });
+
+    await tx.video.upsert({
+      where: { jobId: job.id },
+      update: {
+        storageUrl: finalUrl,
+        durationSeconds: job.project.durationSeconds,
+        fileSizeBytes: BigInt(0),
+        variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
+        expiresAt,
+      },
+      create: {
+        jobId: job.id,
+        userId: job.project.userId,
+        projectId: job.projectId,
+        storageUrl: finalUrl,
+        durationSeconds: job.project.durationSeconds,
+        fileSizeBytes: BigInt(0),
+        variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
+        expiresAt,
+      },
+    });
+
+    return nextJob;
+  });
+
+  await updateProjectTerminalStatus(updated.projectId);
+  return updated;
 }
 
 export async function markVideoJobFailed(jobId: string, message: string) {
