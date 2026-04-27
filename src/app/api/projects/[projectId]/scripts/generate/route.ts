@@ -53,7 +53,7 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
     return conflict('Scripts already exist for this project');
   }
 
-  const generated = generateProjectScripts({
+  const generated = await generateProjectScripts({
     productName: project.productName,
     productDescription: project.productDescription,
     sellingPoints: project.sellingPoints,
