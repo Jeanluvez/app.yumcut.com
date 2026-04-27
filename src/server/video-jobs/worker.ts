@@ -1,11 +1,9 @@
-import path from 'node:path';
 import { prisma } from '@/server/db';
-import { uploadFileToSupabaseStorage, uploadLocalFileToSupabaseStorage } from '@/server/supabase-storage';
+import { uploadFileToSupabaseStorage } from '@/server/supabase-storage';
 import { synthesizeSpeech } from '@/server/tts';
+import { renderBasicVideoFromAsset } from '@/server/video-renderer';
 
 type ClaimedVideoJob = Awaited<ReturnType<typeof claimNextPendingVideoJob>>;
-
-const DEMO_VIDEO_FILE_PATH = path.resolve(process.cwd(), 'scripts/daemon/assets/video/final-demo.mp4');
 
 async function createVoiceoverArtifacts(job: {
   id: string;
@@ -55,7 +53,59 @@ async function createVoiceoverArtifacts(job: {
     voiceoverUrl: uploadedAudio.publicUrl,
     ttsTimestampsUrl: timestampsUrl,
     audioDurationMs: synthesized.durationMs,
+    audioBuffer: synthesized.audioBuffer,
+    audioExtension: synthesized.contentType === 'audio/mpeg' ? 'mp3' : 'wav',
   };
+}
+
+async function resolvePrimaryRenderAsset(job: {
+  project: { selectedAssetIds: string[]; hookAssetId: string | null; userId: string };
+  projectId: string;
+}) {
+  const selectedIds = job.project.selectedAssetIds;
+  const candidateIds = selectedIds.length > 0
+    ? selectedIds
+    : (job.project.hookAssetId ? [job.project.hookAssetId] : []);
+
+  if (candidateIds.length === 0) {
+    throw new Error('Project has no source media selected');
+  }
+
+  const assets = await prisma.asset.findMany({
+    where: {
+      id: { in: candidateIds },
+      projectId: job.projectId,
+      userId: job.project.userId,
+    },
+    select: {
+      id: true,
+      storageUrl: true,
+      mimeType: true,
+      type: true,
+    },
+  });
+
+  if (assets.length === 0) {
+    throw new Error('Selected source asset could not be loaded');
+  }
+
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+  const orderedSelectedAssets = selectedIds
+    .map((id) => assetById.get(id))
+    .filter((asset): asset is NonNullable<typeof asset> => !!asset);
+
+  const preferred =
+    orderedSelectedAssets.find((asset) => asset.type === 'video') ||
+    orderedSelectedAssets.find((asset) => asset.type === 'image') ||
+    (job.project.hookAssetId ? assetById.get(job.project.hookAssetId) ?? null : null) ||
+    orderedSelectedAssets[0] ||
+    assets[0];
+
+  if (!preferred) {
+    throw new Error('Selected source asset could not be resolved');
+  }
+
+  return preferred;
 }
 
 export async function claimNextPendingVideoJob(projectId?: string) {
@@ -80,6 +130,7 @@ export async function claimNextPendingVideoJob(projectId?: string) {
           selectedAssetIds: true,
           hookAssetId: true,
           durationSeconds: true,
+          aspectRatio: true,
         },
       },
       script: {
@@ -132,6 +183,7 @@ export async function claimNextPendingVideoJob(projectId?: string) {
           selectedAssetIds: true,
           hookAssetId: true,
           durationSeconds: true,
+          aspectRatio: true,
         },
       },
       script: {
@@ -186,6 +238,9 @@ export async function markVideoJobDone(jobId: string) {
           userId: true,
           durationSeconds: true,
           language: true,
+          aspectRatio: true,
+          selectedAssetIds: true,
+          hookAssetId: true,
         },
       },
       script: {
@@ -203,11 +258,23 @@ export async function markVideoJobDone(jobId: string) {
   }
 
   const voiceoverArtifacts = await createVoiceoverArtifacts(job, job.project.language);
+  const primaryAsset = await resolvePrimaryRenderAsset(job);
+  const renderedVideo = await renderBasicVideoFromAsset({
+    assetUrl: primaryAsset.storageUrl,
+    assetMimeType: primaryAsset.mimeType,
+    audioBuffer: voiceoverArtifacts.audioBuffer,
+    audioExtension: voiceoverArtifacts.audioExtension,
+    durationSeconds: job.project.durationSeconds,
+    aspectRatio: job.project.aspectRatio,
+  });
   const storagePath = `users/${job.project.userId}/projects/${job.projectId}/outputs/${jobId}-final.mp4`;
-  const uploadedVideo = await uploadLocalFileToSupabaseStorage({
+  const uploadedVideo = await uploadFileToSupabaseStorage({
     path: storagePath,
-    localFilePath: DEMO_VIDEO_FILE_PATH,
-    contentType: 'video/mp4',
+    contentType: renderedVideo.contentType,
+    body: renderedVideo.outputBuffer.buffer.slice(
+      renderedVideo.outputBuffer.byteOffset,
+      renderedVideo.outputBuffer.byteOffset + renderedVideo.outputBuffer.byteLength,
+    ),
     upsert: true,
   });
   const finalUrl = uploadedVideo.publicUrl;
@@ -239,7 +306,7 @@ export async function markVideoJobDone(jobId: string) {
       update: {
         storageUrl: finalUrl,
         durationSeconds: job.project.durationSeconds,
-        fileSizeBytes: BigInt(uploadedVideo.sizeBytes),
+        fileSizeBytes: BigInt(renderedVideo.outputBuffer.byteLength),
         variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
         expiresAt,
       },
@@ -249,7 +316,7 @@ export async function markVideoJobDone(jobId: string) {
         projectId: job.projectId,
         storageUrl: finalUrl,
         durationSeconds: job.project.durationSeconds,
-        fileSizeBytes: BigInt(uploadedVideo.sizeBytes),
+        fileSizeBytes: BigInt(renderedVideo.outputBuffer.byteLength),
         variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
         expiresAt,
       },
