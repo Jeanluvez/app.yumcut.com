@@ -65,6 +65,17 @@ export const createProjectSchema = z.object({
   }
 });
 
+export const createSproklProjectSchema = z.object({
+  name: z.string().trim().min(1, { message: 'Project name is required' }).max(120, { message: 'Project name must be at most 120 characters' }),
+  productName: z.string().trim().min(1, { message: 'Product name is required' }).max(120, { message: 'Product name must be at most 120 characters' }),
+  productDescription: z.string().trim().min(10, { message: 'Product description must be at least 10 characters' }).max(2000, { message: 'Product description must be at most 2000 characters' }),
+  sellingPoints: z.string().trim().min(10, { message: 'Selling points must be at least 10 characters' }).max(2000, { message: 'Selling points must be at most 2000 characters' }),
+  targetAudience: z.string().trim().min(3, { message: 'Target audience is required' }).max(500, { message: 'Target audience must be at most 500 characters' }),
+  durationSeconds: z.union([z.literal(30), z.literal(60), z.literal(90)]),
+  language: z.union([z.literal('en'), z.literal('es')]).default('en'),
+  aspectRatio: z.enum(['vertical_9_16', 'square_1_1', 'landscape_16_9']).default('vertical_9_16'),
+});
+
 export const approveScriptSchema = z.union([
   z.object({
     scripts: z
