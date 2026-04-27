@@ -7,6 +7,7 @@ import { Api } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -36,16 +37,31 @@ function formatBytes(value: string) {
 
 export function ProjectAssetsSection({
   projectId,
+  selectedAssetIds,
+  hookAssetId,
   onChanged,
 }: {
   projectId: string;
+  selectedAssetIds: string[];
+  hookAssetId: string | null;
   onChanged?: () => void;
 }) {
   const [items, setItems] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [savingSelection, setSavingSelection] = useState(false);
   const [assetType, setAssetType] = useState<'image' | 'video' | 'hook'>('image');
+  const [draftSelectedAssetIds, setDraftSelectedAssetIds] = useState<string[]>(selectedAssetIds);
+  const [draftHookAssetId, setDraftHookAssetId] = useState<string | null>(hookAssetId);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setDraftSelectedAssetIds(selectedAssetIds);
+  }, [selectedAssetIds]);
+
+  useEffect(() => {
+    setDraftHookAssetId(hookAssetId);
+  }, [hookAssetId]);
 
   async function refresh() {
     setLoading(true);
@@ -81,11 +97,41 @@ export function ProjectAssetsSection({
     }
   }
 
+  function toggleSelectedAsset(assetId: string, checked: boolean) {
+    setDraftSelectedAssetIds((prev) => {
+      if (checked) {
+        return prev.includes(assetId) ? prev : [...prev, assetId];
+      }
+      return prev.filter((id) => id !== assetId);
+    });
+  }
+
+  async function saveSelection() {
+    setSavingSelection(true);
+    try {
+      await Api.updateProject(projectId, {
+        selectedAssetIds: draftSelectedAssetIds,
+        hookAssetId: draftHookAssetId,
+      });
+      toast.success('Asset selection saved');
+      onChanged?.();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to save asset selection');
+    } finally {
+      setSavingSelection(false);
+    }
+  }
+
+  const hasSelectionChanges =
+    draftHookAssetId !== hookAssetId ||
+    draftSelectedAssetIds.length !== selectedAssetIds.length ||
+    draftSelectedAssetIds.some((id) => !selectedAssetIds.includes(id));
+
   return (
     <Card>
       <CardHeader className="flex-col items-start gap-1">
         <CardTitle>Assets</CardTitle>
-        <CardDescription>Upload source material for this project. This step stores files in Supabase Storage and records them in the asset library.</CardDescription>
+        <CardDescription>Upload source material for this project. Then choose which assets feed the script-to-video pipeline and which single hook video should lead the ad.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <input
@@ -115,6 +161,11 @@ export function ProjectAssetsSection({
             {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
             Upload Asset
           </Button>
+
+          <Button type="button" variant="outline" onClick={saveSelection} disabled={savingSelection || !hasSelectionChanges}>
+            {savingSelection ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Save Selection
+          </Button>
         </div>
 
         {loading ? (
@@ -128,22 +179,51 @@ export function ProjectAssetsSection({
             {items.map((item) => (
               <div key={item.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{item.filename}</div>
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       {formatBytes(item.sizeBytes)} • {new Date(item.createdAt).toLocaleString()}
                     </div>
                   </div>
-                  <Badge variant={item.type === 'hook' ? 'info' : 'default'}>{item.type}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={item.type === 'hook' ? 'info' : 'default'}>{item.type}</Badge>
+                    {draftHookAssetId === item.id ? <Badge variant="success">active hook</Badge> : null}
+                    {draftSelectedAssetIds.includes(item.id) ? <Badge variant="success">selected</Badge> : null}
+                  </div>
                 </div>
-                <a
-                  href={item.storageUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400"
-                >
-                  Open file
-                </a>
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  {item.type !== 'hook' ? (
+                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <Checkbox
+                        checked={draftSelectedAssetIds.includes(item.id)}
+                        onCheckedChange={(checked) => toggleSelectedAsset(item.id, checked === true)}
+                      />
+                      <span>Use in main asset set</span>
+                    </label>
+                  ) : (
+                    <div className="text-sm text-gray-500 dark:text-gray-400">Hook assets are managed separately from the main asset set.</div>
+                  )}
+
+                  {item.type === 'hook' ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={draftHookAssetId === item.id ? 'secondary' : 'outline'}
+                      onClick={() => setDraftHookAssetId((prev) => (prev === item.id ? null : item.id))}
+                    >
+                      {draftHookAssetId === item.id ? 'Clear Hook' : 'Set as Hook'}
+                    </Button>
+                  ) : null}
+
+                  <a
+                    href={item.storageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    Open file
+                  </a>
+                </div>
               </div>
             ))}
           </div>

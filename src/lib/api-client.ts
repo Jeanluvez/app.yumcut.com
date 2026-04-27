@@ -65,6 +65,12 @@ export const Api = {
   }),
   getProjects: () => api('/api/projects'),
   getProject: (id: string) => api(`/api/projects/${id}`),
+  updateProject: (id: string, payload: { selectedAssetIds?: string[]; hookAssetId?: string | null }) =>
+    api(`/api/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      errorToastTitle: 'Failed to update project',
+    }),
   getAssets: (projectId?: string) => {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
     return api(`/api/assets${qs}`);

@@ -28,6 +28,7 @@ type ProjectDetail = {
   updatedAt: string;
   counts: {
     assets: number;
+    uploadedAssets?: number;
     scripts: number;
     videoJobs: number;
     videos: number;
@@ -162,6 +163,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <InfoRow label="Selected Assets" value={String(project.counts.assets)} />
+              <InfoRow label="Uploaded Assets" value={String(project.counts.uploadedAssets ?? project.counts.assets)} />
               <InfoRow label="Scripts" value={String(project.counts.scripts)} />
               <InfoRow label="Video Jobs" value={String(project.counts.videoJobs)} />
               <InfoRow label="Videos" value={String(project.counts.videos)} />
@@ -171,7 +173,12 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <ProjectAssetsSection projectId={projectId} onChanged={() => loadProject()} />
+        <ProjectAssetsSection
+          projectId={projectId}
+          selectedAssetIds={project.selectedAssetIds}
+          hookAssetId={project.hookAssetId}
+          onChanged={() => loadProject()}
+        />
 
         <Card>
           <CardHeader className="flex-col items-start gap-1">

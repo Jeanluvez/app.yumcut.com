@@ -1,10 +1,16 @@
 import { NextRequest } from 'next/server';
 import { authenticateApiRequest } from '@/server/api-user';
 import { prisma } from '@/server/db';
-import { notFound, ok, unauthorized } from '@/server/http';
+import { error, notFound, ok, unauthorized } from '@/server/http';
 import { withApiError } from '@/server/errors';
+import { z } from 'zod';
 
 type Params = { projectId: string };
+
+const updateProjectAssetsSchema = z.object({
+  selectedAssetIds: z.array(z.string().uuid()).max(50).optional(),
+  hookAssetId: z.string().uuid().nullable().optional(),
+});
 
 export const GET = withApiError(async function GET(req: NextRequest, { params }: { params: Promise<Params> }) {
   const auth = await authenticateApiRequest(req);
@@ -95,7 +101,8 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
     counts: {
-      assets: assetCount,
+      assets: project.selectedAssetIds.length,
+      uploadedAssets: assetCount,
       scripts: project._count.scripts,
       videoJobs: project._count.videoJobs,
       videos: project._count.videos,
@@ -120,6 +127,86 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
     })),
   });
 }, 'Failed to load project');
+
+export const PATCH = withApiError(async function PATCH(req: NextRequest, { params }: { params: Promise<Params> }) {
+  const auth = await authenticateApiRequest(req);
+  if (!auth) return unauthorized();
+
+  let json: unknown;
+  try {
+    json = await req.json();
+  } catch {
+    return error('INVALID_JSON', 'Request body must be valid JSON', 400);
+  }
+
+  const parsed = updateProjectAssetsSchema.safeParse(json);
+  if (!parsed.success) {
+    return error('VALIDATION_ERROR', 'Invalid project update payload', 400, parsed.error.flatten());
+  }
+
+  const { projectId } = await params;
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, userId: auth.userId },
+    select: { id: true },
+  });
+  if (!project) return notFound('Project not found');
+
+  const selectedAssetIds = Array.from(new Set(parsed.data.selectedAssetIds ?? []));
+  const hookAssetId = parsed.data.hookAssetId === undefined ? undefined : parsed.data.hookAssetId;
+  const allRequestedIds = Array.from(new Set([
+    ...selectedAssetIds,
+    ...(hookAssetId ? [hookAssetId] : []),
+  ]));
+
+  if (allRequestedIds.length > 0) {
+    const assets = await prisma.asset.findMany({
+      where: {
+        id: { in: allRequestedIds },
+        userId: auth.userId,
+        projectId: project.id,
+      },
+      select: { id: true, type: true },
+    });
+    const foundIds = new Set(assets.map((asset) => asset.id));
+    const missingIds = allRequestedIds.filter((id) => !foundIds.has(id));
+    if (missingIds.length > 0) {
+      return error('VALIDATION_ERROR', 'One or more assets do not belong to this project', 400, { missingAssetIds: missingIds });
+    }
+
+    const hookAsset = hookAssetId ? assets.find((asset) => asset.id === hookAssetId) : null;
+    if (hookAsset && hookAsset.type !== 'hook') {
+      return error('VALIDATION_ERROR', 'Hook asset must use asset type "hook"', 400);
+    }
+
+    const invalidSelected = assets.filter((asset) => selectedAssetIds.includes(asset.id) && asset.type === 'hook');
+    if (invalidSelected.length > 0) {
+      return error('VALIDATION_ERROR', 'Hook assets cannot be added to selected asset IDs', 400, {
+        invalidSelectedAssetIds: invalidSelected.map((asset) => asset.id),
+      });
+    }
+  }
+
+  const updated = await prisma.project.update({
+    where: { id: project.id },
+    data: {
+      ...(parsed.data.selectedAssetIds !== undefined ? { selectedAssetIds } : {}),
+      ...(hookAssetId !== undefined ? { hookAssetId } : {}),
+    },
+    select: {
+      id: true,
+      selectedAssetIds: true,
+      hookAssetId: true,
+      updatedAt: true,
+    },
+  });
+
+  return ok({
+    id: updated.id,
+    selectedAssetIds: updated.selectedAssetIds,
+    hookAssetId: updated.hookAssetId,
+    updatedAt: updated.updatedAt.toISOString(),
+  });
+}, 'Failed to update project');
 
 export const DELETE = withApiError(async function DELETE(req: NextRequest, { params }: { params: Promise<Params> }) {
   const auth = await authenticateApiRequest(req);
