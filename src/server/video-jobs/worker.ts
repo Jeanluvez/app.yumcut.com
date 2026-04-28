@@ -12,6 +12,14 @@ type SubtitleEntry = {
   text: string;
 };
 type RenderStylePreset = 'balanced' | 'punchy' | 'calm';
+type RenderBehaviorFlags = {
+  captionsEnabled: boolean;
+  backgroundMusicEnabled: boolean;
+  stylePreset: RenderStylePreset;
+  useHookClip: boolean;
+  animateImages: boolean;
+  shuffleVideoSlices: boolean;
+};
 
 const DEFAULT_BACKGROUND_MUSIC_PATH = path.join(process.cwd(), 'content/music/my-1-back.wav');
 const DEFAULT_BACKGROUND_MUSIC_URL = 'bundled://content/music/my-1-back.wav';
@@ -24,6 +32,9 @@ function normalizeRenderOptions(promoInfo: unknown) {
             captionsEnabled?: boolean;
             backgroundMusicEnabled?: boolean;
             stylePreset?: RenderStylePreset;
+            useHookClip?: boolean;
+            animateImages?: boolean;
+            shuffleVideoSlices?: boolean;
           };
         }).renderOptions
       : null;
@@ -32,7 +43,10 @@ function normalizeRenderOptions(promoInfo: unknown) {
     captionsEnabled: renderOptions?.captionsEnabled !== false,
     backgroundMusicEnabled: renderOptions?.backgroundMusicEnabled !== false,
     stylePreset: renderOptions?.stylePreset ?? 'balanced',
-  };
+    useHookClip: renderOptions?.useHookClip !== false,
+    animateImages: renderOptions?.animateImages !== false,
+    shuffleVideoSlices: renderOptions?.shuffleVideoSlices !== false,
+  } satisfies RenderBehaviorFlags;
 }
 
 function getRenderStyleProfile(stylePreset: RenderStylePreset) {
@@ -189,11 +203,11 @@ function buildSubtitleEntriesFromTimestamps(timestamps: unknown): SubtitleEntry[
 async function resolveRenderAssets(job: {
   project: { selectedAssetIds: string[]; hookAssetId: string | null; userId: string };
   projectId: string;
-}) {
+}, options: Pick<RenderBehaviorFlags, 'useHookClip'>) {
   const selectedIds = job.project.selectedAssetIds;
   const candidateIds = Array.from(
     new Set([
-      ...(job.project.hookAssetId ? [job.project.hookAssetId] : []),
+      ...(options.useHookClip && job.project.hookAssetId ? [job.project.hookAssetId] : []),
       ...selectedIds,
     ]),
   );
@@ -226,7 +240,9 @@ async function resolveRenderAssets(job: {
     .filter((asset): asset is NonNullable<typeof asset> => !!asset);
 
   const mainAssets = orderedSelectedAssets.filter((asset) => asset.type === 'video' || asset.type === 'image');
-  const hookAsset = job.project.hookAssetId ? assetById.get(job.project.hookAssetId) ?? null : null;
+  const hookAsset = options.useHookClip && job.project.hookAssetId
+    ? assetById.get(job.project.hookAssetId) ?? null
+    : null;
 
   if (hookAsset && hookAsset.type === 'hook') {
     return [
@@ -416,9 +432,16 @@ export async function markVideoJobDone(jobId: string) {
   }
 
   const voiceoverArtifacts = await createVoiceoverArtifacts(job, job.project.language);
-  const renderAssets = await resolveRenderAssets(job);
   const renderOptions = normalizeRenderOptions(job.project.promoInfo);
+  const renderAssets = await resolveRenderAssets(job, { useHookClip: renderOptions.useHookClip });
   const styleProfile = getRenderStyleProfile(renderOptions.stylePreset);
+  const targetRenderDurationSeconds = Math.max(
+    2,
+    Math.min(
+      job.project.durationSeconds,
+      Math.max(2, voiceoverArtifacts.audioDurationMs / 1000 + 0.35),
+    ),
+  );
   const renderedVideo = await renderBasicVideoFromAssets({
     assets: renderAssets.map((asset) => ({
       assetUrl: asset.storageUrl,
@@ -432,12 +455,14 @@ export async function markVideoJobDone(jobId: string) {
       ? 0.1872 * styleProfile.backgroundMusicVolumeMultiplier
       : undefined,
     watermarkText: job.project.user.plan === 'free' ? 'Sprokl' : null,
-    durationSeconds: job.project.durationSeconds,
+    durationSeconds: targetRenderDurationSeconds,
     aspectRatio: job.project.aspectRatio,
     hookSegmentSeconds: styleProfile.hookSegmentSeconds,
     imageSegmentSeconds: styleProfile.imageSegmentSeconds,
     videoSegmentSeconds: styleProfile.videoSegmentSeconds,
     subtitleFontSize: styleProfile.subtitleFontSize,
+    animateImages: renderOptions.animateImages,
+    shuffleVideoSlices: renderOptions.shuffleVideoSlices,
     subtitleEntries: renderOptions.captionsEnabled
       ? buildSubtitleEntriesFromTimestamps(voiceoverArtifacts.timestamps)
       : [],
@@ -481,7 +506,7 @@ export async function markVideoJobDone(jobId: string) {
       where: { jobId: job.id },
       update: {
         storageUrl: finalUrl,
-        durationSeconds: job.project.durationSeconds,
+        durationSeconds: Math.round(targetRenderDurationSeconds),
         fileSizeBytes: BigInt(renderedVideo.outputBuffer.byteLength),
         variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
         expiresAt,
@@ -491,7 +516,7 @@ export async function markVideoJobDone(jobId: string) {
         userId: job.project.userId,
         projectId: job.projectId,
         storageUrl: finalUrl,
-        durationSeconds: job.project.durationSeconds,
+        durationSeconds: Math.round(targetRenderDurationSeconds),
         fileSizeBytes: BigInt(renderedVideo.outputBuffer.byteLength),
         variantLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
         expiresAt,

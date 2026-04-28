@@ -20,6 +20,9 @@ const updateProjectAssetsSchema = z.object({
     captionsEnabled: z.boolean().optional(),
     backgroundMusicEnabled: z.boolean().optional(),
     stylePreset: z.enum(['balanced', 'punchy', 'calm']).optional(),
+    useHookClip: z.boolean().optional(),
+    animateImages: z.boolean().optional(),
+    shuffleVideoSlices: z.boolean().optional(),
   }).optional(),
 });
 
@@ -53,6 +56,9 @@ function normalizeProjectRenderOptions(promoInfo: unknown) {
             captionsEnabled?: boolean;
             backgroundMusicEnabled?: boolean;
             stylePreset?: 'balanced' | 'punchy' | 'calm';
+            useHookClip?: boolean;
+            animateImages?: boolean;
+            shuffleVideoSlices?: boolean;
           };
         }).renderOptions
       : null;
@@ -61,6 +67,9 @@ function normalizeProjectRenderOptions(promoInfo: unknown) {
     captionsEnabled: renderOptions?.captionsEnabled !== false,
     backgroundMusicEnabled: renderOptions?.backgroundMusicEnabled !== false,
     stylePreset: renderOptions?.stylePreset ?? 'balanced',
+    useHookClip: renderOptions?.useHookClip !== false,
+    animateImages: renderOptions?.animateImages !== false,
+    shuffleVideoSlices: renderOptions?.shuffleVideoSlices !== false,
   };
 }
 

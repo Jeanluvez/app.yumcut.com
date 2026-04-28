@@ -14,6 +14,7 @@ type RenderAsset = {
   assetUrl: string;
   assetMimeType: string;
   role?: 'hook' | 'main';
+  animateImage?: boolean;
   sourceStartSeconds?: number;
   sourceDurationSeconds?: number;
   sourceClipMaxSeconds?: number;
@@ -32,6 +33,8 @@ type RenderInput = {
   imageSegmentSeconds?: number;
   videoSegmentSeconds?: number;
   subtitleFontSize?: number;
+  animateImages?: boolean;
+  shuffleVideoSlices?: boolean;
   subtitleEntries?: Array<{
     startSeconds: number;
     endSeconds: number;
@@ -116,7 +119,7 @@ async function prepareSegment(
         '-loop', '1',
         '-i', sourcePath,
         '-t', String(safeDurationSeconds),
-        '-vf', zoomPanFilter,
+        '-vf', asset.role === 'main' && asset.animateImage === false ? videoFilter : zoomPanFilter,
         '-an',
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
@@ -198,6 +201,10 @@ async function expandVideoAssetsIntoSlices(
     videoSegmentSeconds: number;
   },
   totalDurationSeconds: number,
+  options: {
+    animateImages: boolean;
+    shuffleVideoSlices: boolean;
+  },
 ) {
   const prepared = await Promise.all(
     assets.map(async (asset, index) => {
@@ -227,7 +234,10 @@ async function expandVideoAssetsIntoSlices(
     }));
   const imageAssets = prepared
     .filter((item) => item.asset.role !== 'hook' && isImageMimeType(item.asset.assetMimeType))
-    .map((item) => item.asset);
+    .map((item) => ({
+      ...item.asset,
+      animateImage: options.animateImages,
+    }));
   const hasImages = imageAssets.length > 0;
   const maxVideoSlicesPerSource = hasImages ? 2 : 4;
   const reservedSecondsForImages = imageAssets.length * timing.imageSegmentSeconds;
@@ -277,7 +287,7 @@ async function expandVideoAssetsIntoSlices(
     }));
   });
 
-  const randomizedVideoSlices = shuffleArray(videoSlices);
+  const randomizedVideoSlices = options.shuffleVideoSlices ? shuffleArray(videoSlices) : videoSlices;
   const randomizedMainAssets = hasImages
     ? (() => {
         const mixed: RenderAsset[] = [];
@@ -488,7 +498,10 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
     const expandedAssets = await expandVideoAssetsIntoSlices(workspace, input.assets, {
       imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
       videoSegmentSeconds: input.videoSegmentSeconds ?? DEFAULT_VIDEO_SEGMENT_SECONDS,
-    }, input.durationSeconds);
+    }, input.durationSeconds, {
+      animateImages: input.animateImages !== false,
+      shuffleVideoSlices: input.shuffleVideoSlices !== false,
+    });
     const segmentPlan = buildSegmentPlan(expandedAssets, input.durationSeconds, {
       hookSegmentSeconds: input.hookSegmentSeconds ?? DEFAULT_HOOK_SEGMENT_SECONDS,
       imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
@@ -568,7 +581,6 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
               '-filter_complex',
               `[1:a]volume=${String(input.backgroundMusicVolume ?? 0.12)}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
               '-map', '[aout]',
-              '-t', String(input.durationSeconds),
               '-c:a', 'aac',
               mixedAudioPath,
             ],
@@ -584,12 +596,11 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
         '-y',
         '-i', videoInputPath,
         '-i', finalAudioPath,
-        '-t', String(input.durationSeconds),
         '-map', '0:v:0',
         '-map', '1:a:0',
         '-c:v', 'copy',
-        '-af', 'apad',
         '-c:a', 'aac',
+        '-shortest',
         outputPath,
       ],
       { maxBuffer: 20 * 1024 * 1024 },

@@ -80,6 +80,9 @@ export const Api = {
         captionsEnabled?: boolean;
         backgroundMusicEnabled?: boolean;
         stylePreset?: 'balanced' | 'punchy' | 'calm';
+        useHookClip?: boolean;
+        animateImages?: boolean;
+        shuffleVideoSlices?: boolean;
       };
     },
   ) =>

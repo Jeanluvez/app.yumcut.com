@@ -32,6 +32,9 @@ type ProjectDetail = {
     captionsEnabled: boolean;
     backgroundMusicEnabled: boolean;
     stylePreset: 'balanced' | 'punchy' | 'calm';
+    useHookClip: boolean;
+    animateImages: boolean;
+    shuffleVideoSlices: boolean;
   };
   selectedAssetIds: string[];
   hookAssetId: string | null;
@@ -132,6 +135,9 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     captionsEnabled: true,
     backgroundMusicEnabled: true,
     stylePreset: 'balanced' as 'balanced' | 'punchy' | 'calm',
+    useHookClip: true,
+    animateImages: true,
+    shuffleVideoSlices: true,
   });
   const [draftPromo, setDraftPromo] = useState({
     promoEnabled: false,
@@ -162,6 +168,9 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         captionsEnabled: (result as ProjectDetail).renderOptions?.captionsEnabled !== false,
         backgroundMusicEnabled: (result as ProjectDetail).renderOptions?.backgroundMusicEnabled !== false,
         stylePreset: (result as ProjectDetail).renderOptions?.stylePreset ?? 'balanced',
+        useHookClip: (result as ProjectDetail).renderOptions?.useHookClip !== false,
+        animateImages: (result as ProjectDetail).renderOptions?.animateImages !== false,
+        shuffleVideoSlices: (result as ProjectDetail).renderOptions?.shuffleVideoSlices !== false,
       });
       setDraftPromo({
         promoEnabled: (result as ProjectDetail).promoEnabled === true,
@@ -410,6 +419,33 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   }
                 />
                 <span>Include background music</span>
+              </label>
+              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+                <Checkbox
+                  checked={draftRenderOptions.useHookClip}
+                  onCheckedChange={(checked) =>
+                    setDraftRenderOptions((prev) => ({ ...prev, useHookClip: checked === true }))
+                  }
+                />
+                <span>Use hook clip at the start</span>
+              </label>
+              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+                <Checkbox
+                  checked={draftRenderOptions.animateImages}
+                  onCheckedChange={(checked) =>
+                    setDraftRenderOptions((prev) => ({ ...prev, animateImages: checked === true }))
+                  }
+                />
+                <span>Animate image segments</span>
+              </label>
+              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+                <Checkbox
+                  checked={draftRenderOptions.shuffleVideoSlices}
+                  onCheckedChange={(checked) =>
+                    setDraftRenderOptions((prev) => ({ ...prev, shuffleVideoSlices: checked === true }))
+                  }
+                />
+                <span>Shuffle sliced video segments</span>
               </label>
               <div>
                 <Button type="button" variant="outline" onClick={handleSaveRenderOptions} disabled={savingRenderOptions}>
