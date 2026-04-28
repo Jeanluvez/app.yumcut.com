@@ -69,6 +69,14 @@ function fromGenericError(err: Error, fallback: string): Normalized {
   if (lower.includes('unexpected end of json input') || lower.includes('invalid json')) {
     return { status: 400, code: 'INVALID_JSON', message: `${fallback}: Malformed JSON in request body.`, details: { raw } };
   }
+  if (lower.includes('ffmpeg') || lower.includes('ffprobe') || lower.includes('command failed')) {
+    return {
+      status: 500,
+      code: 'MEDIA_PROCESSING_FAILED',
+      message: `${fallback}: Media processing failed. Please try again with a different source file.`,
+      details: { raw },
+    };
+  }
   return { status: 500, code: 'INTERNAL_ERROR', message: `${fallback}: ${raw || 'Internal error'}`, details: { raw } };
 }
 

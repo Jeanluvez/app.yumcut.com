@@ -16,6 +16,7 @@ type RenderAsset = {
   role?: 'hook' | 'main';
   sourceStartSeconds?: number;
   sourceDurationSeconds?: number;
+  sourceClipMaxSeconds?: number;
 };
 
 type RenderInput = {
@@ -78,12 +79,36 @@ async function prepareSegment(
   const segmentPath = path.join(workspace, `segment-${index}.mp4`);
   await writeFile(sourcePath, sourceBuffer);
 
+  const imageFrameRate = 30;
+  const totalFrames = Math.max(1, Math.round(clipDurationSeconds * imageFrameRate));
+  const zoomStart = index % 2 === 0 ? 1.02 : 1.05;
+  const zoomLimit = index % 2 === 0 ? 1.12 : 1.15;
+  const zoomPanFilter = [
+    `scale=${Math.max(width, 1280)}:${Math.max(height, 1280)}:force_original_aspect_ratio=increase`,
+    `zoompan=z='if(eq(on,1),${zoomStart.toFixed(3)},min(${zoomLimit.toFixed(3)},pzoom+0.0012))'`,
+    `:x='(iw-iw/zoom)/2'`,
+    `:y='(ih-ih/zoom)/2'`,
+    `:d=${totalFrames}:s=${width}x${height}:fps=${imageFrameRate}`,
+  ].join('');
   const videoFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`;
   const safeDurationSeconds =
     !isImageMimeType(asset.assetMimeType) &&
-    typeof asset.sourceStartSeconds === 'number' &&
-    typeof asset.sourceDurationSeconds === 'number'
-      ? Math.max(0.8, Math.min(clipDurationSeconds, asset.sourceDurationSeconds - asset.sourceStartSeconds - 0.12))
+    (
+      typeof asset.sourceStartSeconds === 'number' ||
+      typeof asset.sourceClipMaxSeconds === 'number'
+    )
+      ? Math.max(
+          0.8,
+          Math.min(
+            clipDurationSeconds,
+            typeof asset.sourceDurationSeconds === 'number' && typeof asset.sourceStartSeconds === 'number'
+              ? asset.sourceDurationSeconds - asset.sourceStartSeconds - 0.12
+              : clipDurationSeconds,
+            typeof asset.sourceClipMaxSeconds === 'number'
+              ? Math.max(0.8, asset.sourceClipMaxSeconds - 0.06)
+              : clipDurationSeconds,
+          ),
+        )
       : clipDurationSeconds;
   const ffmpegArgs = isImageMimeType(asset.assetMimeType)
     ? [
@@ -91,10 +116,11 @@ async function prepareSegment(
         '-loop', '1',
         '-i', sourcePath,
         '-t', String(safeDurationSeconds),
-        '-vf', videoFilter,
+        '-vf', zoomPanFilter,
         '-an',
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
+        '-r', String(imageFrameRate),
         segmentPath,
       ]
     : [
@@ -109,7 +135,30 @@ async function prepareSegment(
         segmentPath,
       ];
 
-  await execFileAsync('/opt/homebrew/bin/ffmpeg', ffmpegArgs, { maxBuffer: 20 * 1024 * 1024 });
+  try {
+    await execFileAsync('/opt/homebrew/bin/ffmpeg', ffmpegArgs, { maxBuffer: 20 * 1024 * 1024 });
+  } catch (error) {
+    if (!isImageMimeType(asset.assetMimeType)) {
+      throw error;
+    }
+
+    // Fallback: never block the whole job because a Ken Burns image motion filter failed.
+    await execFileAsync(
+      '/opt/homebrew/bin/ffmpeg',
+      [
+        '-y',
+        '-loop', '1',
+        '-i', sourcePath,
+        '-t', String(safeDurationSeconds),
+        '-vf', videoFilter,
+        '-an',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        segmentPath,
+      ],
+      { maxBuffer: 20 * 1024 * 1024 },
+    );
+  }
   return segmentPath;
 }
 
@@ -148,6 +197,7 @@ async function expandVideoAssetsIntoSlices(
     imageSegmentSeconds: number;
     videoSegmentSeconds: number;
   },
+  totalDurationSeconds: number,
 ) {
   const prepared = await Promise.all(
     assets.map(async (asset, index) => {
@@ -165,10 +215,27 @@ async function expandVideoAssetsIntoSlices(
     }),
   );
 
-  const hookAssets = prepared.filter((item) => item.asset.role === 'hook').map((item) => item.asset);
+  const hookAssets = prepared
+    .filter((item) => item.asset.role === 'hook')
+    .map((item) => ({
+      ...item.asset,
+      sourceDurationSeconds: item.durationSeconds ?? undefined,
+      sourceStartSeconds: 0,
+      sourceClipMaxSeconds: item.durationSeconds
+        ? Math.min(item.durationSeconds, DEFAULT_HOOK_SEGMENT_SECONDS)
+        : DEFAULT_HOOK_SEGMENT_SECONDS,
+    }));
   const imageAssets = prepared
     .filter((item) => item.asset.role !== 'hook' && isImageMimeType(item.asset.assetMimeType))
     .map((item) => item.asset);
+  const hasImages = imageAssets.length > 0;
+  const maxVideoSlicesPerSource = hasImages ? 2 : 4;
+  const reservedSecondsForImages = imageAssets.length * timing.imageSegmentSeconds;
+  const reservedSecondsForHooks = hookAssets.length * DEFAULT_HOOK_SEGMENT_SECONDS;
+  const availableSecondsForVideos = Math.max(
+    timing.videoSegmentSeconds,
+    totalDurationSeconds - reservedSecondsForImages - reservedSecondsForHooks,
+  );
 
   const videoSlices = prepared.flatMap((item) => {
     if (item.asset.role === 'hook' || isImageMimeType(item.asset.assetMimeType)) {
@@ -177,24 +244,55 @@ async function expandVideoAssetsIntoSlices(
 
     const durationSeconds = item.durationSeconds ?? timing.videoSegmentSeconds;
     if (durationSeconds <= timing.videoSegmentSeconds * 1.35) {
-      return [item.asset];
+      return [{
+        ...item.asset,
+        sourceDurationSeconds: durationSeconds,
+        sourceStartSeconds: 0,
+        sourceClipMaxSeconds: Math.min(durationSeconds, timing.videoSegmentSeconds),
+      }];
     }
 
-    const sliceCount = Math.min(
-      4,
+    const naturalSliceCount = Math.min(
+      maxVideoSlicesPerSource,
       Math.max(2, Math.floor(durationSeconds / Math.max(1.2, timing.videoSegmentSeconds))),
     );
-    const sliceDuration = Math.min(timing.videoSegmentSeconds, Math.max(1.2, durationSeconds / sliceCount));
+    const sliceCount = Math.max(
+      1,
+      Math.min(
+        naturalSliceCount,
+        Math.max(1, Math.floor(availableSecondsForVideos / Math.max(1.2, timing.videoSegmentSeconds))),
+      ),
+    );
+    const sliceDuration = Math.min(
+      timing.videoSegmentSeconds,
+      Math.max(1.2, durationSeconds / Math.max(1, sliceCount)),
+    );
     const maxStart = Math.max(0, durationSeconds - sliceDuration);
 
     return Array.from({ length: sliceCount }, (_, sliceIndex) => ({
       ...item.asset,
       sourceDurationSeconds: durationSeconds,
       sourceStartSeconds: sliceCount === 1 ? 0 : (maxStart * sliceIndex) / (sliceCount - 1),
+      sourceClipMaxSeconds: sliceDuration,
     }));
   });
 
-  const randomizedMainAssets = shuffleArray([...videoSlices, ...imageAssets]);
+  const randomizedVideoSlices = shuffleArray(videoSlices);
+  const randomizedMainAssets = hasImages
+    ? (() => {
+        const mixed: RenderAsset[] = [];
+        const queue = [...randomizedVideoSlices];
+        imageAssets.forEach((imageAsset, imageIndex) => {
+          const nextVideo = queue.shift();
+          if (nextVideo) mixed.push(nextVideo);
+          mixed.push(imageAsset);
+          if (imageIndex === imageAssets.length - 1 && queue.length > 0) {
+            mixed.push(...queue);
+          }
+        });
+        return mixed;
+      })()
+    : randomizedVideoSlices;
   return [...hookAssets, ...randomizedMainAssets];
 }
 
@@ -207,14 +305,26 @@ function buildSegmentPlan(
     videoSegmentSeconds: number;
   },
 ) {
+  const getPreferredDuration = (asset: RenderAsset) => (
+    asset.role === 'hook'
+      ? timing.hookSegmentSeconds
+      : isImageMimeType(asset.assetMimeType)
+        ? timing.imageSegmentSeconds
+        : timing.videoSegmentSeconds
+  );
+
+  const getMaxRenderableDuration = (asset: RenderAsset) => (
+    typeof asset.sourceClipMaxSeconds === 'number'
+      ? Math.max(0.8, asset.sourceClipMaxSeconds - 0.06)
+      : getPreferredDuration(asset)
+  );
+
+  const capDuration = (asset: RenderAsset, desiredSeconds: number) =>
+    Math.max(0.8, Math.min(desiredSeconds, getMaxRenderableDuration(asset)));
+
   const basePlan = assets.map((asset) => ({
     asset,
-    durationSeconds:
-      asset.role === 'hook'
-        ? timing.hookSegmentSeconds
-        : isImageMimeType(asset.assetMimeType)
-          ? timing.imageSegmentSeconds
-          : timing.videoSegmentSeconds,
+    durationSeconds: capDuration(asset, getPreferredDuration(asset)),
   }));
 
   const baseTotal = basePlan.reduce((sum, item) => sum + item.durationSeconds, 0);
@@ -222,7 +332,7 @@ function buildSegmentPlan(
     const scale = totalDurationSeconds / baseTotal;
     return basePlan.map((item) => ({
       asset: item.asset,
-      durationSeconds: Math.max(0.8, item.durationSeconds * scale),
+      durationSeconds: capDuration(item.asset, item.durationSeconds * scale),
     }));
   }
 
@@ -241,10 +351,32 @@ function buildSegmentPlan(
   let cursor = 0;
   while (remaining > 0.05) {
     const index = extendIndexes[cursor % extendIndexes.length];
-    const delta = Math.min(timing.videoSegmentSeconds, remaining);
-    basePlan[index].durationSeconds += delta;
-    remaining -= delta;
+    const current = basePlan[index];
+    const maxAllowed = getMaxRenderableDuration(current.asset);
+    const capacity = Math.max(0, maxAllowed - current.durationSeconds);
+    const delta = Math.min(timing.videoSegmentSeconds, remaining, capacity);
+    if (delta > 0.01) {
+      current.durationSeconds += delta;
+      remaining -= delta;
+    }
     cursor += 1;
+    if (cursor > extendIndexes.length * 3) break;
+  }
+
+  if (remaining > 0.05) {
+    const repeatableAssets = assets.filter((asset) => asset.role !== 'hook');
+    let repeatCursor = 0;
+    while (remaining > 0.05 && repeatableAssets.length > 0) {
+      const asset = repeatableAssets[repeatCursor % repeatableAssets.length];
+      const durationSeconds = capDuration(asset, Math.min(getPreferredDuration(asset), remaining));
+      basePlan.push({
+        asset,
+        durationSeconds,
+      });
+      remaining -= durationSeconds;
+      repeatCursor += 1;
+      if (repeatCursor > repeatableAssets.length * 12) break;
+    }
   }
 
   return basePlan;
@@ -356,7 +488,7 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
     const expandedAssets = await expandVideoAssetsIntoSlices(workspace, input.assets, {
       imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
       videoSegmentSeconds: input.videoSegmentSeconds ?? DEFAULT_VIDEO_SEGMENT_SECONDS,
-    });
+    }, input.durationSeconds);
     const segmentPlan = buildSegmentPlan(expandedAssets, input.durationSeconds, {
       hookSegmentSeconds: input.hookSegmentSeconds ?? DEFAULT_HOOK_SEGMENT_SECONDS,
       imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
