@@ -350,6 +350,11 @@ export async function markVideoJobDone(jobId: string) {
       project: {
         select: {
           userId: true,
+          user: {
+            select: {
+              plan: true,
+            },
+          },
           durationSeconds: true,
           language: true,
           aspectRatio: true,
@@ -385,6 +390,7 @@ export async function markVideoJobDone(jobId: string) {
     audioExtension: voiceoverArtifacts.audioExtension,
     backgroundMusicPath: renderOptions.backgroundMusicEnabled ? DEFAULT_BACKGROUND_MUSIC_PATH : null,
     backgroundMusicVolume: renderOptions.backgroundMusicEnabled ? 0.1872 : undefined,
+    watermarkText: job.project.user.plan === 'free' ? 'Sprokl' : null,
     durationSeconds: job.project.durationSeconds,
     aspectRatio: job.project.aspectRatio,
     subtitleEntries: renderOptions.captionsEnabled

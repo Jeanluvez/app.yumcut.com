@@ -21,6 +21,7 @@ type RenderInput = {
   audioExtension: string;
   backgroundMusicPath?: string | null;
   backgroundMusicVolume?: number;
+  watermarkText?: string | null;
   durationSeconds: number;
   aspectRatio: 'vertical_9_16' | 'square_1_1' | 'landscape_16_9';
   subtitleEntries?: Array<{
@@ -272,6 +273,12 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
         '-f', 'concat',
         '-safe', '0',
         '-i', concatListPath,
+        ...(input.watermarkText
+          ? [
+              '-vf',
+              `drawtext=text='${input.watermarkText.replace(/'/g, "\\'").replace(/:/g, '\\:')}':fontcolor=white@0.82:fontsize=28:box=1:boxcolor=black@0.35:boxborderw=14:x=w-tw-32:y=h-th-32`,
+            ]
+          : []),
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
         mergedVideoPath,
