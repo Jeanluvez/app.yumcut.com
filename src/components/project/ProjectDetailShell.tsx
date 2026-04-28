@@ -23,7 +23,11 @@ type ProjectDetail = {
   sellingPoints: string;
   targetAudience: string;
   promoEnabled: boolean;
-  promoInfo: unknown;
+  promoInfo: {
+    originalPrice: string;
+    salePrice: string;
+    discountLabel: string;
+  };
   renderOptions?: {
     captionsEnabled: boolean;
     backgroundMusicEnabled: boolean;
@@ -116,6 +120,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [processingVideoJobs, setProcessingVideoJobs] = useState(false);
   const [savingScriptId, setSavingScriptId] = useState<string | null>(null);
   const [savingRenderOptions, setSavingRenderOptions] = useState(false);
+  const [savingPromoInfo, setSavingPromoInfo] = useState(false);
   const [draftScripts, setDraftScripts] = useState<Record<string, {
     styleLabel: string;
     hookText: string;
@@ -127,6 +132,12 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     captionsEnabled: true,
     backgroundMusicEnabled: true,
     stylePreset: 'balanced' as 'balanced' | 'punchy' | 'calm',
+  });
+  const [draftPromo, setDraftPromo] = useState({
+    promoEnabled: false,
+    originalPrice: '',
+    salePrice: '',
+    discountLabel: '',
   });
 
   async function loadProject(signal?: { cancelled: boolean }) {
@@ -151,6 +162,12 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         captionsEnabled: (result as ProjectDetail).renderOptions?.captionsEnabled !== false,
         backgroundMusicEnabled: (result as ProjectDetail).renderOptions?.backgroundMusicEnabled !== false,
         stylePreset: (result as ProjectDetail).renderOptions?.stylePreset ?? 'balanced',
+      });
+      setDraftPromo({
+        promoEnabled: (result as ProjectDetail).promoEnabled === true,
+        originalPrice: (result as ProjectDetail).promoInfo?.originalPrice ?? '',
+        salePrice: (result as ProjectDetail).promoInfo?.salePrice ?? '',
+        discountLabel: (result as ProjectDetail).promoInfo?.discountLabel ?? '',
       });
       setLoadError(null);
     } catch (err: any) {
@@ -258,6 +275,26 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       toast.error(err?.error?.message || 'Failed to update render options');
     } finally {
       setSavingRenderOptions(false);
+    }
+  }
+
+  async function handleSavePromoInfo() {
+    setSavingPromoInfo(true);
+    try {
+      await Api.updateProject(projectId, {
+        promoEnabled: draftPromo.promoEnabled,
+        promoInfo: {
+          originalPrice: draftPromo.originalPrice,
+          salePrice: draftPromo.salePrice,
+          discountLabel: draftPromo.discountLabel,
+        },
+      });
+      toast.success('Promotion settings saved');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to update promotion settings');
+    } finally {
+      setSavingPromoInfo(false);
     }
   }
 
@@ -378,6 +415,63 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 <Button type="button" variant="outline" onClick={handleSaveRenderOptions} disabled={savingRenderOptions}>
                   {savingRenderOptions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Save Render Options
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-col items-start gap-1">
+              <CardTitle>Promotion</CardTitle>
+              <CardDescription>Optional pricing context used during script generation.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+                <Checkbox
+                  checked={draftPromo.promoEnabled}
+                  onCheckedChange={(checked) =>
+                    setDraftPromo((prev) => ({ ...prev, promoEnabled: checked === true }))
+                  }
+                />
+                <span>Include promotion details in generated scripts</span>
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Original Price</div>
+                  <Input
+                    value={draftPromo.originalPrice}
+                    onChange={(event) => setDraftPromo((prev) => ({ ...prev, originalPrice: event.target.value }))}
+                    placeholder="$79"
+                    disabled={!draftPromo.promoEnabled}
+                    maxLength={80}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Sale Price</div>
+                  <Input
+                    value={draftPromo.salePrice}
+                    onChange={(event) => setDraftPromo((prev) => ({ ...prev, salePrice: event.target.value }))}
+                    placeholder="$49"
+                    disabled={!draftPromo.promoEnabled}
+                    maxLength={80}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Offer Details</div>
+                <Textarea
+                  value={draftPromo.discountLabel}
+                  onChange={(event) => setDraftPromo((prev) => ({ ...prev, discountLabel: event.target.value }))}
+                  placeholder="Save 38% this week only"
+                  disabled={!draftPromo.promoEnabled}
+                  maxLength={160}
+                  className="min-h-[84px]"
+                />
+              </div>
+              <div>
+                <Button type="button" variant="outline" onClick={handleSavePromoInfo} disabled={savingPromoInfo}>
+                  {savingPromoInfo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save Promotion
                 </Button>
               </div>
             </CardContent>

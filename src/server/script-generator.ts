@@ -43,7 +43,12 @@ function normalizePromoInfo(promoEnabled: boolean, promoInfo: unknown) {
   return {
     originalPrice: typeof raw.originalPrice === 'string' ? compactText(raw.originalPrice, 80) : '',
     salePrice: typeof raw.salePrice === 'string' ? compactText(raw.salePrice, 80) : '',
-    offerText: typeof raw.offerText === 'string' ? compactText(raw.offerText, 160) : '',
+    offerText:
+      typeof raw.discountLabel === 'string'
+        ? compactText(raw.discountLabel, 160)
+        : typeof raw.offerText === 'string'
+          ? compactText(raw.offerText, 160)
+          : '',
   };
 }
 

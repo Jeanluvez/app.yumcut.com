@@ -70,6 +70,12 @@ export const Api = {
     payload: {
       selectedAssetIds?: string[];
       hookAssetId?: string | null;
+      promoEnabled?: boolean;
+      promoInfo?: {
+        originalPrice?: string;
+        salePrice?: string;
+        discountLabel?: string;
+      };
       renderOptions?: {
         captionsEnabled?: boolean;
         backgroundMusicEnabled?: boolean;

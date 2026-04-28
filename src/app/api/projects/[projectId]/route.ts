@@ -10,12 +10,40 @@ type Params = { projectId: string };
 const updateProjectAssetsSchema = z.object({
   selectedAssetIds: z.array(z.string().uuid()).max(50).optional(),
   hookAssetId: z.string().uuid().nullable().optional(),
+  promoEnabled: z.boolean().optional(),
+  promoInfo: z.object({
+    originalPrice: z.string().trim().max(80).optional(),
+    salePrice: z.string().trim().max(80).optional(),
+    discountLabel: z.string().trim().max(160).optional(),
+  }).optional(),
   renderOptions: z.object({
     captionsEnabled: z.boolean().optional(),
     backgroundMusicEnabled: z.boolean().optional(),
     stylePreset: z.enum(['balanced', 'punchy', 'calm']).optional(),
   }).optional(),
 });
+
+function normalizeProjectPromoInfo(promoEnabled: boolean, promoInfo: unknown) {
+  if (!promoEnabled || !promoInfo || typeof promoInfo !== 'object') {
+    return {
+      originalPrice: '',
+      salePrice: '',
+      discountLabel: '',
+    };
+  }
+
+  const raw = promoInfo as Record<string, unknown>;
+  return {
+    originalPrice: typeof raw.originalPrice === 'string' ? raw.originalPrice : '',
+    salePrice: typeof raw.salePrice === 'string' ? raw.salePrice : '',
+    discountLabel:
+      typeof raw.discountLabel === 'string'
+        ? raw.discountLabel
+        : typeof raw.offerText === 'string'
+          ? raw.offerText
+          : '',
+  };
+}
 
 function normalizeProjectRenderOptions(promoInfo: unknown) {
   const renderOptions =
@@ -141,7 +169,7 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
     sellingPoints: project.sellingPoints,
     targetAudience: project.targetAudience,
     promoEnabled: project.promoEnabled,
-    promoInfo: project.promoInfo,
+    promoInfo: normalizeProjectPromoInfo(project.promoEnabled, project.promoInfo),
     renderOptions: normalizeProjectRenderOptions(project.promoInfo),
     selectedAssetIds: project.selectedAssetIds,
     hookAssetId: project.hookAssetId,
@@ -223,6 +251,8 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
 
   const selectedAssetIds = Array.from(new Set(parsed.data.selectedAssetIds ?? []));
   const hookAssetId = parsed.data.hookAssetId === undefined ? undefined : parsed.data.hookAssetId;
+  const promoEnabled = parsed.data.promoEnabled;
+  const promoInfoPatch = parsed.data.promoInfo;
   const renderOptionsPatch = parsed.data.renderOptions;
   const allRequestedIds = Array.from(new Set([
     ...selectedAssetIds,
@@ -262,10 +292,18 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
     select: { promoInfo: true },
   });
 
-  const nextPromoInfo = renderOptionsPatch
+  const nextPromoInfo = renderOptionsPatch || promoInfoPatch
     ? {
         ...((existingProject?.promoInfo && typeof existingProject.promoInfo === 'object')
           ? existingProject.promoInfo as Record<string, unknown>
+          : {}),
+        ...(promoInfoPatch
+          ? {
+              originalPrice: promoInfoPatch.originalPrice ?? '',
+              salePrice: promoInfoPatch.salePrice ?? '',
+              discountLabel: promoInfoPatch.discountLabel ?? '',
+              offerText: promoInfoPatch.discountLabel ?? '',
+            }
           : {}),
         renderOptions: {
           ...(
@@ -285,12 +323,14 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
     data: {
       ...(parsed.data.selectedAssetIds !== undefined ? { selectedAssetIds } : {}),
       ...(hookAssetId !== undefined ? { hookAssetId } : {}),
+      ...(promoEnabled !== undefined ? { promoEnabled } : {}),
       ...(nextPromoInfo !== undefined ? { promoInfo: nextPromoInfo } : {}),
     },
     select: {
       id: true,
       selectedAssetIds: true,
       hookAssetId: true,
+      promoEnabled: true,
       promoInfo: true,
       updatedAt: true,
     },
@@ -300,6 +340,8 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
     id: updated.id,
     selectedAssetIds: updated.selectedAssetIds,
     hookAssetId: updated.hookAssetId,
+    promoEnabled: updated.promoEnabled,
+    promoInfo: normalizeProjectPromoInfo(updated.promoEnabled, updated.promoInfo),
     renderOptions: normalizeProjectRenderOptions(updated.promoInfo),
     updatedAt: updated.updatedAt.toISOString(),
   });
