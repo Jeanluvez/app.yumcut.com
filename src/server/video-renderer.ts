@@ -184,6 +184,33 @@ async function probeMediaDurationSeconds(filePath: string) {
   return duration;
 }
 
+async function probeKeyframeTimestamps(filePath: string) {
+  const { stdout } = await execFileAsync(
+    '/opt/homebrew/bin/ffprobe',
+    [
+      '-v', 'error',
+      '-select_streams', 'v:0',
+      '-skip_frame', 'nokey',
+      '-show_frames',
+      '-show_entries', 'frame=best_effort_timestamp_time',
+      '-of', 'json',
+      filePath,
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
+
+  try {
+    const parsed = JSON.parse(stdout) as {
+      frames?: Array<{ best_effort_timestamp_time?: string }>;
+    };
+    return (parsed.frames ?? [])
+      .map((frame) => Number.parseFloat(frame.best_effort_timestamp_time ?? ''))
+      .filter((value) => Number.isFinite(value) && value >= 0);
+  } catch {
+    return [];
+  }
+}
+
 function shuffleArray<T>(items: T[]) {
   const next = [...items];
   for (let i = next.length - 1; i > 0; i -= 1) {
@@ -218,6 +245,9 @@ async function expandVideoAssetsIntoSlices(
         durationSeconds: isImageMimeType(asset.assetMimeType)
           ? null
           : await probeMediaDurationSeconds(sourcePath),
+        keyframeTimestamps: isImageMimeType(asset.assetMimeType)
+          ? []
+          : await probeKeyframeTimestamps(sourcePath),
       };
     }),
   );
@@ -262,17 +292,73 @@ async function expandVideoAssetsIntoSlices(
       }];
     }
 
+    if (!options.shuffleVideoSlices) {
+      return [{
+        ...item.asset,
+        sourceDurationSeconds: durationSeconds,
+        sourceStartSeconds: 0,
+        sourceClipMaxSeconds: Math.min(durationSeconds, timing.videoSegmentSeconds),
+      }];
+    }
+
+    const maxSliceCount = Math.max(
+      1,
+      Math.min(
+        maxVideoSlicesPerSource,
+        Math.max(1, Math.floor(availableSecondsForVideos / Math.max(1.2, timing.videoSegmentSeconds))),
+      ),
+    );
+
+    if (options.shuffleVideoSlices) {
+      const minSegmentSeconds = Math.max(1.2, timing.videoSegmentSeconds * 0.55);
+      const targetSegmentSeconds = timing.videoSegmentSeconds;
+      const usableKeyframes = (item.keyframeTimestamps ?? []).filter(
+        (time) => time > minSegmentSeconds * 0.5 && time < durationSeconds - minSegmentSeconds * 0.5,
+      );
+      const keyframeBoundaries = [0, ...usableKeyframes, durationSeconds];
+      const keyframeSlices: RenderAsset[] = [];
+      let segmentStart = 0;
+      let cursor = 1;
+
+      while (cursor < keyframeBoundaries.length && keyframeSlices.length < maxSliceCount) {
+        let segmentEnd = keyframeBoundaries[cursor];
+        while (cursor < keyframeBoundaries.length - 1 && segmentEnd - segmentStart < minSegmentSeconds) {
+          cursor += 1;
+          segmentEnd = keyframeBoundaries[cursor];
+        }
+
+        while (
+          cursor < keyframeBoundaries.length - 1 &&
+          keyframeBoundaries[cursor + 1] - segmentStart <= targetSegmentSeconds * 1.35
+        ) {
+          cursor += 1;
+          segmentEnd = keyframeBoundaries[cursor];
+        }
+
+        const segmentDuration = segmentEnd - segmentStart;
+        if (segmentDuration >= minSegmentSeconds) {
+          keyframeSlices.push({
+            ...item.asset,
+            sourceDurationSeconds: durationSeconds,
+            sourceStartSeconds: segmentStart,
+            sourceClipMaxSeconds: segmentDuration,
+          });
+        }
+
+        segmentStart = segmentEnd;
+        cursor += 1;
+      }
+
+      if (keyframeSlices.length > 0) {
+        return keyframeSlices;
+      }
+    }
+
     const naturalSliceCount = Math.min(
       maxVideoSlicesPerSource,
       Math.max(2, Math.floor(durationSeconds / Math.max(1.2, timing.videoSegmentSeconds))),
     );
-    const sliceCount = Math.max(
-      1,
-      Math.min(
-        naturalSliceCount,
-        Math.max(1, Math.floor(availableSecondsForVideos / Math.max(1.2, timing.videoSegmentSeconds))),
-      ),
-    );
+    const sliceCount = Math.max(1, Math.min(naturalSliceCount, maxSliceCount));
     const sliceDuration = Math.min(
       timing.videoSegmentSeconds,
       Math.max(1.2, durationSeconds / Math.max(1, sliceCount)),
@@ -507,14 +593,31 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
       imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
       videoSegmentSeconds: input.videoSegmentSeconds ?? DEFAULT_VIDEO_SEGMENT_SECONDS,
     });
+    const safeSegmentPlan = [...segmentPlan];
+    const repeatableSegments = safeSegmentPlan.filter((segment) => segment.asset.role !== 'hook');
+    let plannedVideoSeconds = safeSegmentPlan.reduce((sum, segment) => sum + segment.durationSeconds, 0);
+    const minimumBufferedVideoSeconds = input.durationSeconds + 1.2;
+
+    if (repeatableSegments.length > 0) {
+      let repeatCursor = 0;
+      while (plannedVideoSeconds < minimumBufferedVideoSeconds && repeatCursor < repeatableSegments.length * 10) {
+        const template = repeatableSegments[repeatCursor % repeatableSegments.length];
+        safeSegmentPlan.push({
+          asset: template.asset,
+          durationSeconds: template.durationSeconds,
+        });
+        plannedVideoSeconds += template.durationSeconds;
+        repeatCursor += 1;
+      }
+    }
 
     const segmentPaths: string[] = [];
-    for (let i = 0; i < segmentPlan.length; i += 1) {
+    for (let i = 0; i < safeSegmentPlan.length; i += 1) {
       const segmentPath = await prepareSegment(
         workspace,
-        segmentPlan[i].asset,
+        safeSegmentPlan[i].asset,
         i,
-        segmentPlan[i].durationSeconds,
+        safeSegmentPlan[i].durationSeconds,
         width,
         height,
       );
@@ -590,12 +693,19 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
         })()
       : audioPath;
 
+    const finalAudioDurationSeconds = await probeMediaDurationSeconds(finalAudioPath);
+    const finalOutputDurationSeconds = Math.max(
+      0.8,
+      (finalAudioDurationSeconds ?? input.durationSeconds) - 0.02,
+    );
+
     await execFileAsync(
       '/opt/homebrew/bin/ffmpeg',
       [
         '-y',
         '-i', videoInputPath,
         '-i', finalAudioPath,
+        '-t', String(finalOutputDurationSeconds),
         '-map', '0:v:0',
         '-map', '1:a:0',
         '-c:v', 'copy',
