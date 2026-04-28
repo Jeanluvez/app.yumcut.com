@@ -119,6 +119,13 @@ export const Api = {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
     return api(`/api/assets${qs}`, { showErrorToast: false });
   },
+  deleteAsset: (assetId: string) =>
+    api<{ ok: boolean; id: string }>('/api/assets', {
+      method: 'DELETE',
+      body: JSON.stringify({ assetId }),
+      showErrorToast: false,
+      errorToastTitle: 'Failed to delete asset',
+    }),
   getVideos: () => api('/api/videos', { showErrorToast: false }),
   deleteVideo: (videoId: string) =>
     api<{ ok: boolean; id: string }>(`/api/videos/${videoId}`, {

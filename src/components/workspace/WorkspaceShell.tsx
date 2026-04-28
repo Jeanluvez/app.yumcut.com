@@ -91,8 +91,10 @@ export function WorkspaceShell() {
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
+  const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
   const [assetFilter, setAssetFilter] = useState<'all' | 'image' | 'video' | 'hook'>('all');
   const [videoToDelete, setVideoToDelete] = useState<VideoItem | null>(null);
+  const [assetToDelete, setAssetToDelete] = useState<AssetItem | null>(null);
 
   const projectCountLabel = useMemo(() => `${items.length} project${items.length === 1 ? '' : 's'}`, [items.length]);
   const videoCountLabel = useMemo(() => `${videos.length} video${videos.length === 1 ? '' : 's'}`, [videos.length]);
@@ -145,6 +147,20 @@ export function WorkspaceShell() {
     } finally {
       setDeletingVideoId(null);
       setVideoToDelete(null);
+    }
+  }
+
+  async function handleDeleteAsset(assetId: string) {
+    setDeletingAssetId(assetId);
+    try {
+      await Api.deleteAsset(assetId);
+      toast.success('Asset deleted');
+      await Promise.all([loadAssets(), refresh()]);
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Could not delete the asset. Please try again.');
+    } finally {
+      setDeletingAssetId(null);
+      setAssetToDelete(null);
     }
   }
 
@@ -439,6 +455,14 @@ export function WorkspaceShell() {
                               <Link href={`/project/${asset.project.id}`}>Project</Link>
                             </Button>
                           ) : null}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={deletingAssetId === asset.id}
+                            onClick={() => setAssetToDelete(asset)}
+                          >
+                            {deletingAssetId === asset.id ? 'Deleting...' : 'Delete'}
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -468,6 +492,30 @@ export function WorkspaceShell() {
               disabled={!!deletingVideoId}
             >
               {deletingVideoId ? 'Deleting...' : 'Delete video'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!assetToDelete} onOpenChange={(open) => !open && setAssetToDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="flex-col items-start gap-1 text-left">
+            <DialogTitle>Delete asset?</DialogTitle>
+            <DialogDescription>
+              This will remove the asset from your library, storage, and any current project selections that use it.
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setAssetToDelete(null)} disabled={!!deletingAssetId}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => assetToDelete && void handleDeleteAsset(assetToDelete.id)}
+              disabled={!!deletingAssetId}
+            >
+              {deletingAssetId ? 'Deleting...' : 'Delete asset'}
             </Button>
           </div>
         </DialogContent>

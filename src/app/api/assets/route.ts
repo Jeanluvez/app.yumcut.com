@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/server/api-user';
 import { prisma } from '@/server/db';
-import { error, ok, unauthorized } from '@/server/http';
+import { error, notFound, ok, unauthorized } from '@/server/http';
 import { withApiError } from '@/server/errors';
+import { deleteFileFromSupabaseStorage } from '@/server/supabase-storage';
 
 const querySchema = z.object({
   projectId: z.string().uuid().optional(),
@@ -85,3 +86,69 @@ export const GET = withApiError(async function GET(req: NextRequest) {
       : null,
   })));
 }, 'Failed to list assets');
+
+export const DELETE = withApiError(async function DELETE(req: NextRequest) {
+  const auth = await authenticateApiRequest(req);
+  if (!auth) return unauthorized();
+
+  let json: unknown = {};
+  try {
+    const text = await req.text();
+    json = text.trim().length > 0 ? JSON.parse(text) : {};
+  } catch {
+    return error('INVALID_JSON', 'Request body must be valid JSON', 400);
+  }
+
+  const parsed = z.object({ assetId: z.string().uuid() }).safeParse(json);
+  if (!parsed.success) {
+    return error('VALIDATION_ERROR', 'Invalid asset delete payload', 400, parsed.error.flatten());
+  }
+
+  const asset = await prisma.asset.findFirst({
+    where: {
+      id: parsed.data.assetId,
+      userId: auth.userId,
+    },
+    select: {
+      id: true,
+      storageUrl: true,
+    },
+  });
+
+  if (!asset) return notFound('Asset not found');
+
+  await prisma.$transaction(async (tx) => {
+    const projects = await tx.project.findMany({
+      where: {
+        userId: auth.userId,
+        OR: [
+          { hookAssetId: asset.id },
+          { selectedAssetIds: { has: asset.id } },
+        ],
+      },
+      select: {
+        id: true,
+        hookAssetId: true,
+        selectedAssetIds: true,
+      },
+    });
+
+    for (const project of projects) {
+      await tx.project.update({
+        where: { id: project.id },
+        data: {
+          hookAssetId: project.hookAssetId === asset.id ? null : project.hookAssetId,
+          selectedAssetIds: project.selectedAssetIds.filter((id) => id !== asset.id),
+        },
+      });
+    }
+
+    await tx.asset.delete({
+      where: { id: asset.id },
+    });
+  });
+
+  await deleteFileFromSupabaseStorage(asset.storageUrl).catch(() => undefined);
+
+  return ok({ ok: true, id: asset.id });
+}, 'Failed to delete asset');
