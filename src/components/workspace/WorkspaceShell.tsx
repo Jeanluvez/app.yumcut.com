@@ -7,6 +7,7 @@ import { Api } from '@/lib/api-client';
 import { useProjects } from '@/components/providers/ProjectsProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -87,9 +88,11 @@ export function WorkspaceShell() {
   const [submitting, setSubmitting] = useState(false);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [videosLoading, setVideosLoading] = useState(true);
+  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
   const [assetFilter, setAssetFilter] = useState<'all' | 'image' | 'video' | 'hook'>('all');
+  const [videoToDelete, setVideoToDelete] = useState<VideoItem | null>(null);
 
   const projectCountLabel = useMemo(() => `${items.length} project${items.length === 1 ? '' : 's'}`, [items.length]);
   const videoCountLabel = useMemo(() => `${videos.length} video${videos.length === 1 ? '' : 's'}`, [videos.length]);
@@ -130,6 +133,20 @@ export function WorkspaceShell() {
     loadVideos();
     loadAssets();
   }, []);
+
+  async function handleDeleteVideo(videoId: string) {
+    setDeletingVideoId(videoId);
+    try {
+      await Api.deleteVideo(videoId);
+      toast.success('Video deleted');
+      await loadVideos();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Could not delete the video. Please try again.');
+    } finally {
+      setDeletingVideoId(null);
+      setVideoToDelete(null);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -346,6 +363,14 @@ export function WorkspaceShell() {
                           <Button asChild size="sm" variant="ghost">
                             <Link href={`/project/${video.project.id}`}>Open</Link>
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={deletingVideoId === video.id}
+                            onClick={() => setVideoToDelete(video)}
+                          >
+                            {deletingVideoId === video.id ? 'Deleting...' : 'Delete'}
+                          </Button>
                         </div>
                       </div>
                     </div>
@@ -424,6 +449,29 @@ export function WorkspaceShell() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={!!videoToDelete} onOpenChange={(open) => !open && setVideoToDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader className="flex-col items-start gap-1 text-left">
+            <DialogTitle>Delete video?</DialogTitle>
+            <DialogDescription>
+              This will remove the generated video from your workspace and storage. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setVideoToDelete(null)} disabled={!!deletingVideoId}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => videoToDelete && void handleDeleteVideo(videoToDelete.id)}
+              disabled={!!deletingVideoId}
+            >
+              {deletingVideoId ? 'Deleting...' : 'Delete video'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

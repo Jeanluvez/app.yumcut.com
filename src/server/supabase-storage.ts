@@ -86,3 +86,51 @@ export async function uploadLocalFileToSupabaseStorage(params: {
     sizeBytes: body.byteLength,
   };
 }
+
+export function extractSupabaseStoragePath(publicUrlOrPath: string) {
+  const trimmed = publicUrlOrPath.trim();
+  if (!trimmed) {
+    throw new Error('Storage path is required');
+  }
+
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/^\/+/, '');
+  }
+
+  const { supabaseUrl, bucket } = getSupabaseStorageConfig();
+  const expectedPrefix = `${supabaseUrl}/storage/v1/object/public/${encodeURIComponent(bucket)}/`;
+  if (!trimmed.startsWith(expectedPrefix)) {
+    throw new Error('Storage URL does not match the configured Supabase bucket');
+  }
+
+  const encodedPath = trimmed.slice(expectedPrefix.length);
+  return encodedPath
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => decodeURIComponent(segment))
+    .join('/');
+}
+
+export async function deleteFileFromSupabaseStorage(publicUrlOrPath: string) {
+  const { supabaseUrl, serviceRoleKey, bucket } = getSupabaseStorageConfig();
+  const path = extractSupabaseStoragePath(publicUrlOrPath);
+  const objectPath = encodeStoragePath(path);
+
+  const response = await fetch(
+    `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath}`,
+    {
+      method: 'DELETE',
+      headers: {
+        authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+      },
+    },
+  );
+
+  if (!response.ok && response.status !== 404) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Supabase storage delete failed (${response.status}): ${text || response.statusText}`);
+  }
+
+  return { path };
+}

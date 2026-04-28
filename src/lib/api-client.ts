@@ -46,7 +46,7 @@ export async function api<T>(url: string, init?: ApiRequestInit): Promise<T> {
 }
 
 export const Api = {
-  getSettings: () => api<import('@/shared/types').UserSettingsDTO>('/api/settings'),
+  getSettings: () => api<import('@/shared/types').UserSettingsDTO>('/api/settings', { showErrorToast: false }),
   patchSetting: <K extends keyof import('@/shared/types').UserSettingsDTO>(
     key: K,
     value: import('@/shared/types').UserSettingsDTO[K]
@@ -63,7 +63,7 @@ export const Api = {
     body: JSON.stringify({ language }),
     ...(init ?? {}),
   }),
-  getProjects: () => api('/api/projects'),
+  getProjects: () => api('/api/projects', { showErrorToast: false }),
   getProject: (id: string) => api(`/api/projects/${id}`),
   updateProject: (id: string, payload: { selectedAssetIds?: string[]; hookAssetId?: string | null }) =>
     api(`/api/projects/${id}`, {
@@ -107,9 +107,15 @@ export const Api = {
     }),
   getAssets: (projectId?: string) => {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
-    return api(`/api/assets${qs}`);
+    return api(`/api/assets${qs}`, { showErrorToast: false });
   },
-  getVideos: () => api('/api/videos'),
+  getVideos: () => api('/api/videos', { showErrorToast: false }),
+  deleteVideo: (videoId: string) =>
+    api<{ ok: boolean; id: string }>(`/api/videos/${videoId}`, {
+      method: 'DELETE',
+      showErrorToast: false,
+      errorToastTitle: 'Failed to delete video',
+    }),
   getProjectStatus: (id: string) => api<import('@/shared/types').ProjectStatusDTO>(`/api/projects/${id}/status`),
   getTelegramAccount: () => api<import('@/shared/types').TelegramAccountStatusDTO>('/api/telegram/account'),
   createTelegramLinkToken: () => api<import('@/shared/types').TelegramLinkTokenDTO>('/api/telegram/link-token', { method: 'POST' }),

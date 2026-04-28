@@ -35,16 +35,53 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
     );
   }
 
+  const staleProcessingCutoff = new Date(Date.now() - 5 * 60 * 1000);
+  await prisma.videoJob.updateMany({
+    where: {
+      projectId: project.id,
+      status: 'processing',
+      startedAt: { lt: staleProcessingCutoff },
+      completedAt: null,
+    },
+    data: {
+      status: 'pending',
+      startedAt: null,
+      errorMessage: null,
+    },
+  });
+
+  const activeProcessingJob = await prisma.videoJob.findFirst({
+    where: {
+      projectId: project.id,
+      status: 'processing',
+      completedAt: null,
+    },
+    select: { id: true },
+  });
+  if (activeProcessingJob) {
+    return error(
+      'JOB_ALREADY_PROCESSING',
+      'A video job is already processing. Please wait a moment and refresh.',
+      409,
+    );
+  }
+
   const processed = await processNextPendingVideoJob(project.id);
+  if (!processed) {
+    return error(
+      'NO_PENDING_VIDEO_JOBS',
+      'There are no pending video jobs to process for this project.',
+      400,
+    );
+  }
+
   return ok({
-    processed: processed
-      ? [
-          {
-            id: processed.id,
-            status: processed.status,
-            variantIndex: processed.variantIndex,
-          },
-        ]
-      : [],
+    processed: [
+      {
+        id: processed.id,
+        status: processed.status,
+        variantIndex: processed.variantIndex,
+      },
+    ],
   });
 }, 'Failed to process video jobs');

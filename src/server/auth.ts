@@ -55,7 +55,7 @@ export async function getAuthSession(): Promise<AppSession> {
   }
 
   const user = await currentUser();
-  await ensureCurrentUserRecord();
+  await ensureCurrentUserRecord().catch(() => null);
 
   return {
     user: {
