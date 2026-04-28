@@ -73,6 +73,7 @@ export const Api = {
       renderOptions?: {
         captionsEnabled?: boolean;
         backgroundMusicEnabled?: boolean;
+        stylePreset?: 'balanced' | 'punchy' | 'calm';
       };
     },
   ) =>

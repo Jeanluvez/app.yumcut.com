@@ -5,9 +5,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const HOOK_SEGMENT_SECONDS = 1.8;
-const IMAGE_SEGMENT_SECONDS = 2.5;
-const VIDEO_SEGMENT_SECONDS = 3;
+const DEFAULT_HOOK_SEGMENT_SECONDS = 1.8;
+const DEFAULT_IMAGE_SEGMENT_SECONDS = 2.5;
+const DEFAULT_VIDEO_SEGMENT_SECONDS = 3;
+const DEFAULT_SUBTITLE_FONT_SIZE = 40;
 
 type RenderAsset = {
   assetUrl: string;
@@ -24,6 +25,10 @@ type RenderInput = {
   watermarkText?: string | null;
   durationSeconds: number;
   aspectRatio: 'vertical_9_16' | 'square_1_1' | 'landscape_16_9';
+  hookSegmentSeconds?: number;
+  imageSegmentSeconds?: number;
+  videoSegmentSeconds?: number;
+  subtitleFontSize?: number;
   subtitleEntries?: Array<{
     startSeconds: number;
     endSeconds: number;
@@ -100,15 +105,23 @@ async function prepareSegment(
   return segmentPath;
 }
 
-function buildSegmentPlan(assets: RenderAsset[], totalDurationSeconds: number) {
+function buildSegmentPlan(
+  assets: RenderAsset[],
+  totalDurationSeconds: number,
+  timing: {
+    hookSegmentSeconds: number;
+    imageSegmentSeconds: number;
+    videoSegmentSeconds: number;
+  },
+) {
   const basePlan = assets.map((asset) => ({
     asset,
     durationSeconds:
       asset.role === 'hook'
-        ? HOOK_SEGMENT_SECONDS
+        ? timing.hookSegmentSeconds
         : isImageMimeType(asset.assetMimeType)
-          ? IMAGE_SEGMENT_SECONDS
-          : VIDEO_SEGMENT_SECONDS,
+          ? timing.imageSegmentSeconds
+          : timing.videoSegmentSeconds,
   }));
 
   const baseTotal = basePlan.reduce((sum, item) => sum + item.durationSeconds, 0);
@@ -135,7 +148,7 @@ function buildSegmentPlan(assets: RenderAsset[], totalDurationSeconds: number) {
   let cursor = 0;
   while (remaining > 0.05) {
     const index = extendIndexes[cursor % extendIndexes.length];
-    const delta = Math.min(VIDEO_SEGMENT_SECONDS, remaining);
+    const delta = Math.min(timing.videoSegmentSeconds, remaining);
     basePlan[index].durationSeconds += delta;
     remaining -= delta;
     cursor += 1;
@@ -199,6 +212,7 @@ function formatAssTime(seconds: number) {
 async function writeSubtitleFile(
   workspace: string,
   entries: NonNullable<RenderInput['subtitleEntries']>,
+  fontSize: number,
 ) {
   const subtitlePath = path.join(workspace, 'subtitles.ass');
   const header = `[Script Info]
@@ -210,7 +224,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,40,&H00FFFFFF,&H000000FF,&H00111111,&H55000000,1,0,0,0,100,100,0,0,1,2,0,2,48,48,145,1
+Style: Default,Arial,${fontSize},&H00FFFFFF,&H000000FF,&H00111111,&H55000000,1,0,0,0,100,100,0,0,1,2,0,2,48,48,145,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -246,7 +260,11 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
     await writeFile(audioPath, input.audioBuffer);
 
     const { width, height } = getAspectSize(input.aspectRatio);
-    const segmentPlan = buildSegmentPlan(input.assets, input.durationSeconds);
+    const segmentPlan = buildSegmentPlan(input.assets, input.durationSeconds, {
+      hookSegmentSeconds: input.hookSegmentSeconds ?? DEFAULT_HOOK_SEGMENT_SECONDS,
+      imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
+      videoSegmentSeconds: input.videoSegmentSeconds ?? DEFAULT_VIDEO_SEGMENT_SECONDS,
+    });
 
     const segmentPaths: string[] = [];
     for (let i = 0; i < segmentPlan.length; i += 1) {
@@ -288,7 +306,11 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
 
     const videoInputPath = input.subtitleEntries && input.subtitleEntries.length > 0
       ? await (async () => {
-          const subtitlePath = await writeSubtitleFile(workspace, input.subtitleEntries);
+          const subtitlePath = await writeSubtitleFile(
+            workspace,
+            input.subtitleEntries,
+            input.subtitleFontSize ?? DEFAULT_SUBTITLE_FONT_SIZE,
+          );
           await execFileAsync(
             '/opt/homebrew/bin/ffmpeg',
             [

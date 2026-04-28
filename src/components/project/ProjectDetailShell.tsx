@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ProjectAssetsSection } from './ProjectAssetsSection';
 
@@ -26,6 +27,7 @@ type ProjectDetail = {
   renderOptions?: {
     captionsEnabled: boolean;
     backgroundMusicEnabled: boolean;
+    stylePreset: 'balanced' | 'punchy' | 'calm';
   };
   selectedAssetIds: string[];
   hookAssetId: string | null;
@@ -124,6 +126,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [draftRenderOptions, setDraftRenderOptions] = useState({
     captionsEnabled: true,
     backgroundMusicEnabled: true,
+    stylePreset: 'balanced' as 'balanced' | 'punchy' | 'calm',
   });
 
   async function loadProject(signal?: { cancelled: boolean }) {
@@ -147,6 +150,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       setDraftRenderOptions({
         captionsEnabled: (result as ProjectDetail).renderOptions?.captionsEnabled !== false,
         backgroundMusicEnabled: (result as ProjectDetail).renderOptions?.backgroundMusicEnabled !== false,
+        stylePreset: (result as ProjectDetail).renderOptions?.stylePreset ?? 'balanced',
       });
       setLoadError(null);
     } catch (err: any) {
@@ -328,9 +332,30 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           <Card>
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>Render Options</CardTitle>
-              <CardDescription>Control subtitles and background music for the next render.</CardDescription>
+              <CardDescription>Control subtitles, background music, and render pacing for the next video.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid gap-2">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Style Preset</div>
+                <Select
+                  value={draftRenderOptions.stylePreset}
+                  onValueChange={(value: 'balanced' | 'punchy' | 'calm') =>
+                    setDraftRenderOptions((prev) => ({ ...prev, stylePreset: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select style preset" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="balanced">Balanced</SelectItem>
+                    <SelectItem value="punchy">Punchy</SelectItem>
+                    <SelectItem value="calm">Calm</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Balanced keeps the current default. Punchy cuts faster. Calm holds shots longer with slightly softer audio.
+                </div>
+              </div>
               <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
                 <Checkbox
                   checked={draftRenderOptions.captionsEnabled}

@@ -11,6 +11,7 @@ type SubtitleEntry = {
   endSeconds: number;
   text: string;
 };
+type RenderStylePreset = 'balanced' | 'punchy' | 'calm';
 
 const DEFAULT_BACKGROUND_MUSIC_PATH = path.join(process.cwd(), 'content/music/my-1-back.wav');
 const DEFAULT_BACKGROUND_MUSIC_URL = 'bundled://content/music/my-1-back.wav';
@@ -18,12 +19,49 @@ const DEFAULT_BACKGROUND_MUSIC_URL = 'bundled://content/music/my-1-back.wav';
 function normalizeRenderOptions(promoInfo: unknown) {
   const renderOptions =
     promoInfo && typeof promoInfo === 'object' && 'renderOptions' in promoInfo
-      ? (promoInfo as { renderOptions?: { captionsEnabled?: boolean; backgroundMusicEnabled?: boolean } }).renderOptions
+      ? (promoInfo as {
+          renderOptions?: {
+            captionsEnabled?: boolean;
+            backgroundMusicEnabled?: boolean;
+            stylePreset?: RenderStylePreset;
+          };
+        }).renderOptions
       : null;
 
   return {
     captionsEnabled: renderOptions?.captionsEnabled !== false,
     backgroundMusicEnabled: renderOptions?.backgroundMusicEnabled !== false,
+    stylePreset: renderOptions?.stylePreset ?? 'balanced',
+  };
+}
+
+function getRenderStyleProfile(stylePreset: RenderStylePreset) {
+  if (stylePreset === 'punchy') {
+    return {
+      hookSegmentSeconds: 1.5,
+      imageSegmentSeconds: 1.8,
+      videoSegmentSeconds: 2.4,
+      subtitleFontSize: 36,
+      backgroundMusicVolumeMultiplier: 1.15,
+    };
+  }
+
+  if (stylePreset === 'calm') {
+    return {
+      hookSegmentSeconds: 2.2,
+      imageSegmentSeconds: 3.2,
+      videoSegmentSeconds: 4,
+      subtitleFontSize: 44,
+      backgroundMusicVolumeMultiplier: 0.9,
+    };
+  }
+
+  return {
+    hookSegmentSeconds: 1.8,
+    imageSegmentSeconds: 2.5,
+    videoSegmentSeconds: 3,
+    subtitleFontSize: 40,
+    backgroundMusicVolumeMultiplier: 1,
   };
 }
 
@@ -380,6 +418,7 @@ export async function markVideoJobDone(jobId: string) {
   const voiceoverArtifacts = await createVoiceoverArtifacts(job, job.project.language);
   const renderAssets = await resolveRenderAssets(job);
   const renderOptions = normalizeRenderOptions(job.project.promoInfo);
+  const styleProfile = getRenderStyleProfile(renderOptions.stylePreset);
   const renderedVideo = await renderBasicVideoFromAssets({
     assets: renderAssets.map((asset) => ({
       assetUrl: asset.storageUrl,
@@ -389,10 +428,16 @@ export async function markVideoJobDone(jobId: string) {
     audioBuffer: voiceoverArtifacts.audioBuffer,
     audioExtension: voiceoverArtifacts.audioExtension,
     backgroundMusicPath: renderOptions.backgroundMusicEnabled ? DEFAULT_BACKGROUND_MUSIC_PATH : null,
-    backgroundMusicVolume: renderOptions.backgroundMusicEnabled ? 0.1872 : undefined,
+    backgroundMusicVolume: renderOptions.backgroundMusicEnabled
+      ? 0.1872 * styleProfile.backgroundMusicVolumeMultiplier
+      : undefined,
     watermarkText: job.project.user.plan === 'free' ? 'Sprokl' : null,
     durationSeconds: job.project.durationSeconds,
     aspectRatio: job.project.aspectRatio,
+    hookSegmentSeconds: styleProfile.hookSegmentSeconds,
+    imageSegmentSeconds: styleProfile.imageSegmentSeconds,
+    videoSegmentSeconds: styleProfile.videoSegmentSeconds,
+    subtitleFontSize: styleProfile.subtitleFontSize,
     subtitleEntries: renderOptions.captionsEnabled
       ? buildSubtitleEntriesFromTimestamps(voiceoverArtifacts.timestamps)
       : [],

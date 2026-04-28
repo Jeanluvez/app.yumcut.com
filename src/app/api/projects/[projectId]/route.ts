@@ -13,18 +13,26 @@ const updateProjectAssetsSchema = z.object({
   renderOptions: z.object({
     captionsEnabled: z.boolean().optional(),
     backgroundMusicEnabled: z.boolean().optional(),
+    stylePreset: z.enum(['balanced', 'punchy', 'calm']).optional(),
   }).optional(),
 });
 
 function normalizeProjectRenderOptions(promoInfo: unknown) {
   const renderOptions =
     promoInfo && typeof promoInfo === 'object' && 'renderOptions' in promoInfo
-      ? (promoInfo as { renderOptions?: { captionsEnabled?: boolean; backgroundMusicEnabled?: boolean } }).renderOptions
+      ? (promoInfo as {
+          renderOptions?: {
+            captionsEnabled?: boolean;
+            backgroundMusicEnabled?: boolean;
+            stylePreset?: 'balanced' | 'punchy' | 'calm';
+          };
+        }).renderOptions
       : null;
 
   return {
     captionsEnabled: renderOptions?.captionsEnabled !== false,
     backgroundMusicEnabled: renderOptions?.backgroundMusicEnabled !== false,
+    stylePreset: renderOptions?.stylePreset ?? 'balanced',
   };
 }
 
