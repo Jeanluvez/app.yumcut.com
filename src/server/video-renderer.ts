@@ -14,6 +14,8 @@ type RenderAsset = {
   assetUrl: string;
   assetMimeType: string;
   role?: 'hook' | 'main';
+  sourceStartSeconds?: number;
+  sourceDurationSeconds?: number;
 };
 
 type RenderInput = {
@@ -77,12 +79,18 @@ async function prepareSegment(
   await writeFile(sourcePath, sourceBuffer);
 
   const videoFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`;
+  const safeDurationSeconds =
+    !isImageMimeType(asset.assetMimeType) &&
+    typeof asset.sourceStartSeconds === 'number' &&
+    typeof asset.sourceDurationSeconds === 'number'
+      ? Math.max(0.8, Math.min(clipDurationSeconds, asset.sourceDurationSeconds - asset.sourceStartSeconds - 0.12))
+      : clipDurationSeconds;
   const ffmpegArgs = isImageMimeType(asset.assetMimeType)
     ? [
         '-y',
         '-loop', '1',
         '-i', sourcePath,
-        '-t', String(clipDurationSeconds),
+        '-t', String(safeDurationSeconds),
         '-vf', videoFilter,
         '-an',
         '-c:v', 'libx264',
@@ -91,9 +99,9 @@ async function prepareSegment(
       ]
     : [
         '-y',
-        '-stream_loop', '-1',
         '-i', sourcePath,
-        '-t', String(clipDurationSeconds),
+        ...(typeof asset.sourceStartSeconds === 'number' ? ['-ss', String(asset.sourceStartSeconds)] : []),
+        '-t', String(safeDurationSeconds),
         '-vf', videoFilter,
         '-an',
         '-c:v', 'libx264',
@@ -103,6 +111,91 @@ async function prepareSegment(
 
   await execFileAsync('/opt/homebrew/bin/ffmpeg', ffmpegArgs, { maxBuffer: 20 * 1024 * 1024 });
   return segmentPath;
+}
+
+async function probeMediaDurationSeconds(filePath: string) {
+  const { stdout } = await execFileAsync(
+    '/opt/homebrew/bin/ffprobe',
+    [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ],
+    { maxBuffer: 4 * 1024 * 1024 },
+  );
+
+  const duration = Number.parseFloat(stdout.trim());
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return null;
+  }
+  return duration;
+}
+
+function shuffleArray<T>(items: T[]) {
+  const next = [...items];
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+async function expandVideoAssetsIntoSlices(
+  workspace: string,
+  assets: RenderAsset[],
+  timing: {
+    imageSegmentSeconds: number;
+    videoSegmentSeconds: number;
+  },
+) {
+  const prepared = await Promise.all(
+    assets.map(async (asset, index) => {
+      const sourceBuffer = await downloadRemoteFile(asset.assetUrl);
+      const sourcePath = path.join(workspace, `asset-${index}${getOutputExtensionFromMime(asset.assetMimeType)}`);
+      await writeFile(sourcePath, sourceBuffer);
+
+      return {
+        asset,
+        sourcePath,
+        durationSeconds: isImageMimeType(asset.assetMimeType)
+          ? null
+          : await probeMediaDurationSeconds(sourcePath),
+      };
+    }),
+  );
+
+  const hookAssets = prepared.filter((item) => item.asset.role === 'hook').map((item) => item.asset);
+  const imageAssets = prepared
+    .filter((item) => item.asset.role !== 'hook' && isImageMimeType(item.asset.assetMimeType))
+    .map((item) => item.asset);
+
+  const videoSlices = prepared.flatMap((item) => {
+    if (item.asset.role === 'hook' || isImageMimeType(item.asset.assetMimeType)) {
+      return [];
+    }
+
+    const durationSeconds = item.durationSeconds ?? timing.videoSegmentSeconds;
+    if (durationSeconds <= timing.videoSegmentSeconds * 1.35) {
+      return [item.asset];
+    }
+
+    const sliceCount = Math.min(
+      4,
+      Math.max(2, Math.floor(durationSeconds / Math.max(1.2, timing.videoSegmentSeconds))),
+    );
+    const sliceDuration = Math.min(timing.videoSegmentSeconds, Math.max(1.2, durationSeconds / sliceCount));
+    const maxStart = Math.max(0, durationSeconds - sliceDuration);
+
+    return Array.from({ length: sliceCount }, (_, sliceIndex) => ({
+      ...item.asset,
+      sourceDurationSeconds: durationSeconds,
+      sourceStartSeconds: sliceCount === 1 ? 0 : (maxStart * sliceIndex) / (sliceCount - 1),
+    }));
+  });
+
+  const randomizedMainAssets = shuffleArray([...videoSlices, ...imageAssets]);
+  return [...hookAssets, ...randomizedMainAssets];
 }
 
 function buildSegmentPlan(
@@ -260,7 +353,11 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
     await writeFile(audioPath, input.audioBuffer);
 
     const { width, height } = getAspectSize(input.aspectRatio);
-    const segmentPlan = buildSegmentPlan(input.assets, input.durationSeconds, {
+    const expandedAssets = await expandVideoAssetsIntoSlices(workspace, input.assets, {
+      imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
+      videoSegmentSeconds: input.videoSegmentSeconds ?? DEFAULT_VIDEO_SEGMENT_SECONDS,
+    });
+    const segmentPlan = buildSegmentPlan(expandedAssets, input.durationSeconds, {
       hookSegmentSeconds: input.hookSegmentSeconds ?? DEFAULT_HOOK_SEGMENT_SECONDS,
       imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
       videoSegmentSeconds: input.videoSegmentSeconds ?? DEFAULT_VIDEO_SEGMENT_SECONDS,
