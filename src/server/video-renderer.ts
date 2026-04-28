@@ -19,6 +19,8 @@ type RenderInput = {
   assets: RenderAsset[];
   audioBuffer: Buffer;
   audioExtension: string;
+  backgroundMusicPath?: string | null;
+  backgroundMusicVolume?: number;
   durationSeconds: number;
   aspectRatio: 'vertical_9_16' | 'square_1_1' | 'landscape_16_9';
   subtitleEntries?: Array<{
@@ -235,6 +237,7 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
     await mkdir(workspace, { recursive: true });
 
     const audioPath = path.join(workspace, `voiceover.${input.audioExtension}`);
+    const mixedAudioPath = path.join(workspace, 'mixed-audio.m4a');
     const concatListPath = path.join(workspace, 'concat.txt');
     const mergedVideoPath = path.join(workspace, 'merged.mp4');
     const subtitledVideoPath = path.join(workspace, 'subtitled.mp4');
@@ -295,12 +298,34 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
         })()
       : mergedVideoPath;
 
+    const finalAudioPath = input.backgroundMusicPath
+      ? await (async () => {
+          await execFileAsync(
+            '/opt/homebrew/bin/ffmpeg',
+            [
+              '-y',
+              '-i', audioPath,
+              '-stream_loop', '-1',
+              '-i', input.backgroundMusicPath,
+              '-filter_complex',
+              `[1:a]volume=${String(input.backgroundMusicVolume ?? 0.12)}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
+              '-map', '[aout]',
+              '-t', String(input.durationSeconds),
+              '-c:a', 'aac',
+              mixedAudioPath,
+            ],
+            { maxBuffer: 20 * 1024 * 1024 },
+          );
+          return mixedAudioPath;
+        })()
+      : audioPath;
+
     await execFileAsync(
       '/opt/homebrew/bin/ffmpeg',
       [
         '-y',
         '-i', videoInputPath,
-        '-i', audioPath,
+        '-i', finalAudioPath,
         '-t', String(input.durationSeconds),
         '-map', '0:v:0',
         '-map', '1:a:0',

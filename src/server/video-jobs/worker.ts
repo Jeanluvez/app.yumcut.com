@@ -3,6 +3,7 @@ import { incrementVideoGenerationCount } from '@/server/plan-limits';
 import { uploadFileToSupabaseStorage } from '@/server/supabase-storage';
 import { synthesizeSpeech } from '@/server/tts';
 import { renderBasicVideoFromAssets } from '@/server/video-renderer';
+import path from 'node:path';
 
 type ClaimedVideoJob = Awaited<ReturnType<typeof claimNextPendingVideoJob>>;
 type SubtitleEntry = {
@@ -10,6 +11,9 @@ type SubtitleEntry = {
   endSeconds: number;
   text: string;
 };
+
+const DEFAULT_BACKGROUND_MUSIC_PATH = path.join(process.cwd(), 'content/music/my-1-back.wav');
+const DEFAULT_BACKGROUND_MUSIC_URL = 'bundled://content/music/my-1-back.wav';
 
 async function createVoiceoverArtifacts(job: {
   id: string;
@@ -365,6 +369,8 @@ export async function markVideoJobDone(jobId: string) {
     })),
     audioBuffer: voiceoverArtifacts.audioBuffer,
     audioExtension: voiceoverArtifacts.audioExtension,
+    backgroundMusicPath: DEFAULT_BACKGROUND_MUSIC_PATH,
+    backgroundMusicVolume: 0.1872,
     durationSeconds: job.project.durationSeconds,
     aspectRatio: job.project.aspectRatio,
     subtitleEntries: buildSubtitleEntriesFromTimestamps(voiceoverArtifacts.timestamps),
@@ -391,6 +397,7 @@ export async function markVideoJobDone(jobId: string) {
         errorMessage: null,
         voiceoverUrl: voiceoverArtifacts.voiceoverUrl,
         ttsTimestampsUrl: voiceoverArtifacts.ttsTimestampsUrl,
+        musicUrl: DEFAULT_BACKGROUND_MUSIC_URL,
         finalUrl,
       },
       select: {

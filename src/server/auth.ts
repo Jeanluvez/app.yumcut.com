@@ -11,7 +11,17 @@ export type AppSession = {
   };
 } | null;
 
-function getDisplayName(user: Awaited<ReturnType<typeof currentUser>>): string | null {
+type ClerkUser = Awaited<ReturnType<typeof currentUser>>;
+
+async function safeCurrentUser(): Promise<ClerkUser | null> {
+  try {
+    return await currentUser();
+  } catch {
+    return null;
+  }
+}
+
+function getDisplayName(user: ClerkUser): string | null {
   if (!user) return null;
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
   if (fullName) return fullName;
@@ -19,7 +29,7 @@ function getDisplayName(user: Awaited<ReturnType<typeof currentUser>>): string |
   return user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? null;
 }
 
-function getPrimaryEmail(user: Awaited<ReturnType<typeof currentUser>>, userId: string): string {
+function getPrimaryEmail(user: ClerkUser, userId: string): string {
   const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? null;
   if (email && email.trim()) {
     return email.trim().toLowerCase();
@@ -33,7 +43,7 @@ export async function ensureCurrentUserRecord() {
     return null;
   }
 
-  const user = await currentUser();
+  const user = await safeCurrentUser();
   const email = getPrimaryEmail(user, userId);
 
   return prisma.user.upsert({
@@ -54,13 +64,18 @@ export async function getAuthSession(): Promise<AppSession> {
     return null;
   }
 
-  const user = await currentUser();
+  const user = await safeCurrentUser();
   await ensureCurrentUserRecord().catch(() => null);
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  }).catch(() => null);
 
   return {
     user: {
       id: userId,
-      email: getPrimaryEmail(user, userId),
+      email: dbUser?.email ?? getPrimaryEmail(user, userId),
       name: getDisplayName(user),
       image: user?.imageUrl ?? null,
       isAdmin: false,
