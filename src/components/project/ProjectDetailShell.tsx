@@ -23,6 +23,10 @@ type ProjectDetail = {
   targetAudience: string;
   promoEnabled: boolean;
   promoInfo: unknown;
+  renderOptions?: {
+    captionsEnabled: boolean;
+    backgroundMusicEnabled: boolean;
+  };
   selectedAssetIds: string[];
   hookAssetId: string | null;
   durationSeconds: number;
@@ -109,6 +113,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [creatingVideoJobs, setCreatingVideoJobs] = useState(false);
   const [processingVideoJobs, setProcessingVideoJobs] = useState(false);
   const [savingScriptId, setSavingScriptId] = useState<string | null>(null);
+  const [savingRenderOptions, setSavingRenderOptions] = useState(false);
   const [draftScripts, setDraftScripts] = useState<Record<string, {
     styleLabel: string;
     hookText: string;
@@ -116,6 +121,10 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     ctaText: string;
     isSelected: boolean;
   }>>({});
+  const [draftRenderOptions, setDraftRenderOptions] = useState({
+    captionsEnabled: true,
+    backgroundMusicEnabled: true,
+  });
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
@@ -135,6 +144,10 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         ]),
       );
       setDraftScripts(nextDrafts);
+      setDraftRenderOptions({
+        captionsEnabled: (result as ProjectDetail).renderOptions?.captionsEnabled !== false,
+        backgroundMusicEnabled: (result as ProjectDetail).renderOptions?.backgroundMusicEnabled !== false,
+      });
       setLoadError(null);
     } catch (err: any) {
       if (signal?.cancelled) return;
@@ -231,6 +244,19 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     }
   }
 
+  async function handleSaveRenderOptions() {
+    setSavingRenderOptions(true);
+    try {
+      await Api.updateProject(projectId, { renderOptions: draftRenderOptions });
+      toast.success('Render options saved');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to update render options');
+    } finally {
+      setSavingRenderOptions(false);
+    }
+  }
+
   useEffect(() => {
     const signal = { cancelled: false };
     loadProject(signal);
@@ -296,6 +322,39 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
               <InfoRow label="Language" value={project.language} />
               <InfoRow label="Aspect Ratio" value={project.aspectRatio} />
               <InfoRow label="Promo" value={project.promoEnabled ? 'Enabled' : 'Disabled'} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-col items-start gap-1">
+              <CardTitle>Render Options</CardTitle>
+              <CardDescription>Control subtitles and background music for the next render.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+                <Checkbox
+                  checked={draftRenderOptions.captionsEnabled}
+                  onCheckedChange={(checked) =>
+                    setDraftRenderOptions((prev) => ({ ...prev, captionsEnabled: checked === true }))
+                  }
+                />
+                <span>Burn subtitles into output videos</span>
+              </label>
+              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+                <Checkbox
+                  checked={draftRenderOptions.backgroundMusicEnabled}
+                  onCheckedChange={(checked) =>
+                    setDraftRenderOptions((prev) => ({ ...prev, backgroundMusicEnabled: checked === true }))
+                  }
+                />
+                <span>Include background music</span>
+              </label>
+              <div>
+                <Button type="button" variant="outline" onClick={handleSaveRenderOptions} disabled={savingRenderOptions}>
+                  {savingRenderOptions ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save Render Options
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

@@ -15,6 +15,18 @@ type SubtitleEntry = {
 const DEFAULT_BACKGROUND_MUSIC_PATH = path.join(process.cwd(), 'content/music/my-1-back.wav');
 const DEFAULT_BACKGROUND_MUSIC_URL = 'bundled://content/music/my-1-back.wav';
 
+function normalizeRenderOptions(promoInfo: unknown) {
+  const renderOptions =
+    promoInfo && typeof promoInfo === 'object' && 'renderOptions' in promoInfo
+      ? (promoInfo as { renderOptions?: { captionsEnabled?: boolean; backgroundMusicEnabled?: boolean } }).renderOptions
+      : null;
+
+  return {
+    captionsEnabled: renderOptions?.captionsEnabled !== false,
+    backgroundMusicEnabled: renderOptions?.backgroundMusicEnabled !== false,
+  };
+}
+
 async function createVoiceoverArtifacts(job: {
   id: string;
   projectId: string;
@@ -343,6 +355,7 @@ export async function markVideoJobDone(jobId: string) {
           aspectRatio: true,
           selectedAssetIds: true,
           hookAssetId: true,
+          promoInfo: true,
         },
       },
       script: {
@@ -361,6 +374,7 @@ export async function markVideoJobDone(jobId: string) {
 
   const voiceoverArtifacts = await createVoiceoverArtifacts(job, job.project.language);
   const renderAssets = await resolveRenderAssets(job);
+  const renderOptions = normalizeRenderOptions(job.project.promoInfo);
   const renderedVideo = await renderBasicVideoFromAssets({
     assets: renderAssets.map((asset) => ({
       assetUrl: asset.storageUrl,
@@ -369,11 +383,13 @@ export async function markVideoJobDone(jobId: string) {
     })),
     audioBuffer: voiceoverArtifacts.audioBuffer,
     audioExtension: voiceoverArtifacts.audioExtension,
-    backgroundMusicPath: DEFAULT_BACKGROUND_MUSIC_PATH,
-    backgroundMusicVolume: 0.1872,
+    backgroundMusicPath: renderOptions.backgroundMusicEnabled ? DEFAULT_BACKGROUND_MUSIC_PATH : null,
+    backgroundMusicVolume: renderOptions.backgroundMusicEnabled ? 0.1872 : undefined,
     durationSeconds: job.project.durationSeconds,
     aspectRatio: job.project.aspectRatio,
-    subtitleEntries: buildSubtitleEntriesFromTimestamps(voiceoverArtifacts.timestamps),
+    subtitleEntries: renderOptions.captionsEnabled
+      ? buildSubtitleEntriesFromTimestamps(voiceoverArtifacts.timestamps)
+      : [],
   });
   const storagePath = `users/${job.project.userId}/projects/${job.projectId}/outputs/${jobId}-final.mp4`;
   const uploadedVideo = await uploadFileToSupabaseStorage({
@@ -397,7 +413,7 @@ export async function markVideoJobDone(jobId: string) {
         errorMessage: null,
         voiceoverUrl: voiceoverArtifacts.voiceoverUrl,
         ttsTimestampsUrl: voiceoverArtifacts.ttsTimestampsUrl,
-        musicUrl: DEFAULT_BACKGROUND_MUSIC_URL,
+        musicUrl: renderOptions.backgroundMusicEnabled ? DEFAULT_BACKGROUND_MUSIC_URL : null,
         finalUrl,
       },
       select: {

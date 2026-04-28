@@ -10,7 +10,23 @@ type Params = { projectId: string };
 const updateProjectAssetsSchema = z.object({
   selectedAssetIds: z.array(z.string().uuid()).max(50).optional(),
   hookAssetId: z.string().uuid().nullable().optional(),
+  renderOptions: z.object({
+    captionsEnabled: z.boolean().optional(),
+    backgroundMusicEnabled: z.boolean().optional(),
+  }).optional(),
 });
+
+function normalizeProjectRenderOptions(promoInfo: unknown) {
+  const renderOptions =
+    promoInfo && typeof promoInfo === 'object' && 'renderOptions' in promoInfo
+      ? (promoInfo as { renderOptions?: { captionsEnabled?: boolean; backgroundMusicEnabled?: boolean } }).renderOptions
+      : null;
+
+  return {
+    captionsEnabled: renderOptions?.captionsEnabled !== false,
+    backgroundMusicEnabled: renderOptions?.backgroundMusicEnabled !== false,
+  };
+}
 
 export const GET = withApiError(async function GET(req: NextRequest, { params }: { params: Promise<Params> }) {
   const auth = await authenticateApiRequest(req);
@@ -118,6 +134,7 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
     targetAudience: project.targetAudience,
     promoEnabled: project.promoEnabled,
     promoInfo: project.promoInfo,
+    renderOptions: normalizeProjectRenderOptions(project.promoInfo),
     selectedAssetIds: project.selectedAssetIds,
     hookAssetId: project.hookAssetId,
     durationSeconds: project.durationSeconds,
@@ -198,6 +215,7 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
 
   const selectedAssetIds = Array.from(new Set(parsed.data.selectedAssetIds ?? []));
   const hookAssetId = parsed.data.hookAssetId === undefined ? undefined : parsed.data.hookAssetId;
+  const renderOptionsPatch = parsed.data.renderOptions;
   const allRequestedIds = Array.from(new Set([
     ...selectedAssetIds,
     ...(hookAssetId ? [hookAssetId] : []),
@@ -231,16 +249,41 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
     }
   }
 
+  const existingProject = await prisma.project.findUnique({
+    where: { id: project.id },
+    select: { promoInfo: true },
+  });
+
+  const nextPromoInfo = renderOptionsPatch
+    ? {
+        ...((existingProject?.promoInfo && typeof existingProject.promoInfo === 'object')
+          ? existingProject.promoInfo as Record<string, unknown>
+          : {}),
+        renderOptions: {
+          ...(
+            existingProject?.promoInfo &&
+            typeof existingProject.promoInfo === 'object' &&
+            'renderOptions' in existingProject.promoInfo
+              ? ((existingProject.promoInfo as { renderOptions?: Record<string, unknown> }).renderOptions ?? {})
+              : {}
+          ),
+          ...renderOptionsPatch,
+        },
+      }
+    : undefined;
+
   const updated = await prisma.project.update({
     where: { id: project.id },
     data: {
       ...(parsed.data.selectedAssetIds !== undefined ? { selectedAssetIds } : {}),
       ...(hookAssetId !== undefined ? { hookAssetId } : {}),
+      ...(nextPromoInfo !== undefined ? { promoInfo: nextPromoInfo } : {}),
     },
     select: {
       id: true,
       selectedAssetIds: true,
       hookAssetId: true,
+      promoInfo: true,
       updatedAt: true,
     },
   });
@@ -249,6 +292,7 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
     id: updated.id,
     selectedAssetIds: updated.selectedAssetIds,
     hookAssetId: updated.hookAssetId,
+    renderOptions: normalizeProjectRenderOptions(updated.promoInfo),
     updatedAt: updated.updatedAt.toISOString(),
   });
 }, 'Failed to update project');

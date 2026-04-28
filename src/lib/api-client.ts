@@ -65,7 +65,17 @@ export const Api = {
   }),
   getProjects: () => api('/api/projects', { showErrorToast: false }),
   getProject: (id: string) => api(`/api/projects/${id}`),
-  updateProject: (id: string, payload: { selectedAssetIds?: string[]; hookAssetId?: string | null }) =>
+  updateProject: (
+    id: string,
+    payload: {
+      selectedAssetIds?: string[];
+      hookAssetId?: string | null;
+      renderOptions?: {
+        captionsEnabled?: boolean;
+        backgroundMusicEnabled?: boolean;
+      };
+    },
+  ) =>
     api(`/api/projects/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
