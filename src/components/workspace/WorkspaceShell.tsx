@@ -131,6 +131,8 @@ export function WorkspaceShell() {
   const [assetFilter, setAssetFilter] = useState<'all' | 'image' | 'video' | 'hook'>('all');
   const [videoToDelete, setVideoToDelete] = useState<VideoItem | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<AssetItem | null>(null);
+  const [publishingItemId, setPublishingItemId] = useState<string | null>(null);
+  const [publishingAllReady, setPublishingAllReady] = useState(false);
 
   const projectCountLabel = useMemo(() => `${items.length} project${items.length === 1 ? '' : 's'}`, [items.length]);
   const videoCountLabel = useMemo(() => `${videos.length} video${videos.length === 1 ? '' : 's'}`, [videos.length]);
@@ -178,6 +180,10 @@ export function WorkspaceShell() {
     () => `${publishQueueItems.length} item${publishQueueItems.length === 1 ? '' : 's'}`,
     [publishQueueItems.length],
   );
+  const readyPublishItems = useMemo(
+    () => publishQueueItems.filter((item) => item.status === 'ready'),
+    [publishQueueItems],
+  );
 
   async function loadVideos() {
     setVideosLoading(true);
@@ -208,6 +214,10 @@ export function WorkspaceShell() {
     loadAssets();
   }, []);
 
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
   async function handleDeleteVideo(videoId: string) {
     setDeletingVideoId(videoId);
     try {
@@ -233,6 +243,37 @@ export function WorkspaceShell() {
     } finally {
       setDeletingAssetId(null);
       setAssetToDelete(null);
+    }
+  }
+
+  async function handlePublishQueueItem(item: PublishQueueItem) {
+    setPublishingItemId(item.id);
+    try {
+      await Api.publishProjectQueueItem(item.projectId, item.id);
+      toast.success(item.status === 'failed' ? 'Publish task retried' : 'Publish task marked as published');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Could not publish this task. Please try again.');
+      await refresh();
+    } finally {
+      setPublishingItemId(null);
+    }
+  }
+
+  async function handlePublishAllReady() {
+    if (readyPublishItems.length === 0) return;
+    setPublishingAllReady(true);
+    try {
+      for (const item of readyPublishItems) {
+        await Api.publishProjectQueueItem(item.projectId, item.id);
+      }
+      toast.success('All ready publish tasks were processed');
+      await refresh();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'One or more publish tasks failed to process.');
+      await refresh();
+    } finally {
+      setPublishingAllReady(false);
     }
   }
 
@@ -545,9 +586,22 @@ export function WorkspaceShell() {
           </Card>
 
           <Card>
-            <CardHeader className="flex-col items-start gap-1">
-              <CardTitle>Publish Queue</CardTitle>
-              <CardDescription>{loading ? 'Loading publish queue...' : publishCountLabel}</CardDescription>
+            <CardHeader className="flex-col items-start gap-3">
+              <div>
+                <CardTitle>Publish Queue</CardTitle>
+                <CardDescription>{loading ? 'Loading publish queue...' : publishCountLabel}</CardDescription>
+              </div>
+              <div className="flex w-full flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handlePublishAllReady()}
+                  disabled={publishingAllReady || readyPublishItems.length === 0}
+                >
+                  {publishingAllReady ? 'Publishing...' : `Publish Ready Items${readyPublishItems.length > 0 ? ` (${readyPublishItems.length})` : ''}`}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {publishQueueItems.length === 0 ? (
@@ -584,6 +638,21 @@ export function WorkspaceShell() {
                           ) : null}
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          {item.status === 'ready' || item.status === 'failed' ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handlePublishQueueItem(item)}
+                              disabled={publishingItemId === item.id || publishingAllReady}
+                            >
+                              {publishingItemId === item.id
+                                ? 'Publishing...'
+                                : item.status === 'failed'
+                                  ? 'Retry Failed'
+                                  : 'Publish Now'}
+                            </Button>
+                          ) : null}
                           <Button asChild size="sm" variant="ghost">
                             <Link href={`/project/${item.projectId}`}>Open Project</Link>
                           </Button>

@@ -31,7 +31,7 @@ const updateProjectAssetsSchema = z.object({
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).optional().default(''),
     publishAt: z.string().datetime(),
-    status: z.enum(['draft', 'scheduled', 'published', 'failed']),
+    status: z.enum(['draft', 'scheduled', 'ready', 'published', 'failed']),
     publishedAt: z.string().datetime().nullable().optional(),
     errorMessage: z.string().trim().max(500).nullable().optional(),
     createdAt: z.string().datetime(),
@@ -40,11 +40,12 @@ const updateProjectAssetsSchema = z.object({
 });
 
 function derivePublishQueueStatus(item: {
-  status?: 'draft' | 'scheduled' | 'published' | 'failed';
+  status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
   publishAt?: string;
 }) {
   if (item.status === 'published') return 'published' as const;
   if (item.status === 'failed') return 'failed' as const;
+  if (item.status === 'ready') return 'ready' as const;
   if (item.status === 'scheduled') {
     const publishAt = item.publishAt ? Date.parse(item.publishAt) : Number.NaN;
     if (Number.isFinite(publishAt) && publishAt <= Date.now()) {
@@ -113,7 +114,7 @@ function normalizeProjectPublishQueue(promoInfo: unknown) {
             title?: string;
             description?: string;
             publishAt?: string;
-            status?: 'draft' | 'scheduled' | 'published' | 'failed';
+            status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
             publishedAt?: string | null;
             errorMessage?: string | null;
             createdAt?: string;

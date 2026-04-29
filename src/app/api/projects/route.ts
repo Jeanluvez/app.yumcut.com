@@ -53,7 +53,9 @@ export const GET = withApiError(async function GET(req: NextRequest) {
               description: item.description ?? '',
               publishAt: item.publishAt ?? '',
               status:
-                item.status === 'published'
+                item.status === 'ready'
+                  ? 'ready'
+                  : item.status === 'published'
                   ? 'published'
                   : item.status === 'failed'
                     ? 'failed'

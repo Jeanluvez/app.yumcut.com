@@ -1,5 +1,24 @@
 export type ApiRequestInit = RequestInit & { showErrorToast?: boolean; errorToastTitle?: string };
 
+async function showCopyableErrorToast(title: string, message: string) {
+  try {
+    const { toast } = await import('sonner');
+    toast.error(title, {
+      description: message,
+      action: typeof navigator !== 'undefined' && navigator.clipboard
+        ? {
+            label: 'Copy',
+            onClick: async () => {
+              try {
+                await navigator.clipboard.writeText(message);
+              } catch {}
+            },
+          }
+        : undefined,
+    });
+  } catch {}
+}
+
 export async function api<T>(url: string, init?: ApiRequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { 'content-type': 'application/json', ...(init?.headers || {}) } });
   let data: any = null;
@@ -35,10 +54,7 @@ export async function api<T>(url: string, init?: ApiRequestInit): Promise<T> {
     const defaultShowToast = res.status !== 401;
     const showToast = init?.showErrorToast ?? defaultShowToast;
     if (showToast && typeof window !== 'undefined') {
-      try {
-        const { toast } = await import('sonner');
-        toast.error(init?.errorToastTitle || 'Something went wrong', { description: message });
-      } catch {}
+      await showCopyableErrorToast(init?.errorToastTitle || 'Something went wrong', message);
     }
     throw err;
   }
