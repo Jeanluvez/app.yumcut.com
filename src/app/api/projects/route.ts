@@ -16,6 +16,7 @@ export const GET = withApiError(async function GET(req: NextRequest) {
       id: true,
       name: true,
       status: true,
+      promoInfo: true,
       createdAt: true,
     },
   });
@@ -25,6 +26,13 @@ export const GET = withApiError(async function GET(req: NextRequest) {
       id: project.id,
       title: project.name,
       status: project.status,
+      publishQueue:
+        project.promoInfo &&
+        typeof project.promoInfo === 'object' &&
+        'publishQueue' in project.promoInfo &&
+        Array.isArray((project.promoInfo as { publishQueue?: unknown[] }).publishQueue)
+          ? (project.promoInfo as { publishQueue?: unknown[] }).publishQueue
+          : [],
       createdAt: project.createdAt.toISOString(),
     })),
   );

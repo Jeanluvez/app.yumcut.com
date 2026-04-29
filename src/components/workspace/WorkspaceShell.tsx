@@ -58,6 +58,36 @@ type AssetItem = {
   } | null;
 };
 
+type ProjectItem = {
+  id: string;
+  title?: string | null;
+  name?: string | null;
+  status?: string | null;
+  createdAt?: string | null;
+  publishQueue?: Array<{
+    id?: string;
+    videoId?: string;
+    title?: string;
+    description?: string;
+    publishAt?: string;
+    status?: 'draft' | 'scheduled';
+    createdAt?: string;
+    updatedAt?: string;
+  }>;
+};
+
+type PublishQueueItem = {
+  id: string;
+  projectId: string;
+  projectTitle: string;
+  videoId: string;
+  title: string;
+  description: string;
+  publishAt: string;
+  status: 'draft' | 'scheduled';
+  createdAt: string;
+};
+
 const initialForm: FormState = {
   name: '',
   productName: '',
@@ -105,6 +135,31 @@ export function WorkspaceShell() {
   const assetCountLabel = useMemo(
     () => `${filteredAssets.length} asset${filteredAssets.length === 1 ? '' : 's'}`,
     [filteredAssets.length],
+  );
+  const publishQueueItems = useMemo<PublishQueueItem[]>(() => {
+    return (items as ProjectItem[])
+      .flatMap((project) =>
+        (project.publishQueue ?? []).map((entry, index) => ({
+          id: entry.id || `${project.id}-${entry.videoId || 'video'}-${entry.publishAt || index}`,
+          projectId: project.id,
+          projectTitle: project.title || project.name || 'Untitled project',
+          videoId: entry.videoId || '',
+          title: entry.title?.trim() || 'Untitled post',
+          description: entry.description?.trim() || '',
+          publishAt: entry.publishAt || '',
+          status: entry.status === 'scheduled' ? 'scheduled' : 'draft',
+          createdAt: entry.createdAt || '',
+        })),
+      )
+      .sort((a, b) => {
+        const aTime = a.publishAt ? new Date(a.publishAt).getTime() : 0;
+        const bTime = b.publishAt ? new Date(b.publishAt).getTime() : 0;
+        return bTime - aTime;
+      });
+  }, [items]);
+  const publishCountLabel = useMemo(
+    () => `${publishQueueItems.length} item${publishQueueItems.length === 1 ? '' : 's'}`,
+    [publishQueueItems.length],
   );
 
   async function loadVideos() {
@@ -462,6 +517,51 @@ export function WorkspaceShell() {
                             onClick={() => setAssetToDelete(asset)}
                           >
                             {deletingAssetId === asset.id ? 'Deleting...' : 'Delete'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-col items-start gap-1">
+              <CardTitle>Publish Queue</CardTitle>
+              <CardDescription>{loading ? 'Loading publish queue...' : publishCountLabel}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {publishQueueItems.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  No publish drafts yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {publishQueueItems.map((item) => (
+                    <div key={item.id} className="min-w-0 rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                              {item.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
+                            Project: {item.projectTitle}
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {item.publishAt ? `Publish at ${new Date(item.publishAt).toLocaleString()}` : 'No publish time set'}
+                          </div>
+                          {item.description ? (
+                            <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{item.description}</div>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <Button asChild size="sm" variant="ghost">
+                            <Link href={`/project/${item.projectId}`}>Open Project</Link>
                           </Button>
                         </div>
                       </div>
