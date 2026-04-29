@@ -27,14 +27,33 @@ const updateProjectAssetsSchema = z.object({
   publishQueue: z.array(z.object({
     id: z.string().min(1).max(80),
     videoId: z.string().uuid(),
+    platform: z.enum(['tiktok', 'instagram_reels', 'youtube_shorts']).optional().default('tiktok'),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).optional().default(''),
     publishAt: z.string().datetime(),
-    status: z.enum(['draft', 'scheduled']),
+    status: z.enum(['draft', 'scheduled', 'published', 'failed']),
+    publishedAt: z.string().datetime().nullable().optional(),
+    errorMessage: z.string().trim().max(500).nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })).max(50).optional(),
 });
+
+function derivePublishQueueStatus(item: {
+  status?: 'draft' | 'scheduled' | 'published' | 'failed';
+  publishAt?: string;
+}) {
+  if (item.status === 'published') return 'published' as const;
+  if (item.status === 'failed') return 'failed' as const;
+  if (item.status === 'scheduled') {
+    const publishAt = item.publishAt ? Date.parse(item.publishAt) : Number.NaN;
+    if (Number.isFinite(publishAt) && publishAt <= Date.now()) {
+      return 'ready' as const;
+    }
+    return 'scheduled' as const;
+  }
+  return 'draft' as const;
+}
 
 function normalizeProjectPromoInfo(promoEnabled: boolean, promoInfo: unknown) {
   if (!promoEnabled || !promoInfo || typeof promoInfo !== 'object') {
@@ -90,10 +109,13 @@ function normalizeProjectPublishQueue(promoInfo: unknown) {
           publishQueue?: Array<{
             id?: string;
             videoId?: string;
+            platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
             title?: string;
             description?: string;
             publishAt?: string;
-            status?: 'draft' | 'scheduled';
+            status?: 'draft' | 'scheduled' | 'published' | 'failed';
+            publishedAt?: string | null;
+            errorMessage?: string | null;
             createdAt?: string;
             updatedAt?: string;
           }>;
@@ -107,10 +129,13 @@ function normalizeProjectPublishQueue(promoInfo: unknown) {
     .map((item) => ({
       id: item.id ?? '',
       videoId: item.videoId ?? '',
+      platform: item.platform ?? 'tiktok',
       title: item.title ?? '',
       description: item.description ?? '',
       publishAt: item.publishAt ?? '',
-      status: item.status === 'scheduled' ? 'scheduled' : 'draft',
+      status: derivePublishQueueStatus(item),
+      publishedAt: item.publishedAt ?? null,
+      errorMessage: item.errorMessage ?? null,
       createdAt: item.createdAt ?? item.publishAt ?? '',
       updatedAt: item.updatedAt ?? item.publishAt ?? '',
     }));

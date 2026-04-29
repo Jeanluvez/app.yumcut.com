@@ -87,10 +87,13 @@ export const Api = {
       publishQueue?: Array<{
         id: string;
         videoId: string;
+        platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
         title: string;
         description: string;
         publishAt: string;
-        status: 'draft' | 'scheduled';
+        status: 'draft' | 'scheduled' | 'published' | 'failed';
+        publishedAt?: string | null;
+        errorMessage?: string | null;
         createdAt: string;
         updatedAt: string;
       }>;
@@ -134,6 +137,12 @@ export const Api = {
       method: 'POST',
       body: JSON.stringify({}),
       errorToastTitle: 'Failed to process video jobs',
+    }),
+  publishProjectQueueItem: (projectId: string, itemId: string) =>
+    api(`/api/projects/${projectId}/publish-queue/${itemId}/publish`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+      errorToastTitle: 'Failed to publish post',
     }),
   getAssets: (projectId?: string) => {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';

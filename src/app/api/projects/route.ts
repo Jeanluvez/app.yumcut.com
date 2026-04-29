@@ -31,7 +31,40 @@ export const GET = withApiError(async function GET(req: NextRequest) {
         typeof project.promoInfo === 'object' &&
         'publishQueue' in project.promoInfo &&
         Array.isArray((project.promoInfo as { publishQueue?: unknown[] }).publishQueue)
-          ? (project.promoInfo as { publishQueue?: unknown[] }).publishQueue
+          ? (project.promoInfo as {
+              publishQueue?: Array<{
+                id?: string;
+                videoId?: string;
+                platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+                title?: string;
+                description?: string;
+                publishAt?: string;
+                status?: 'draft' | 'scheduled' | 'published' | 'failed';
+                publishedAt?: string | null;
+                errorMessage?: string | null;
+                createdAt?: string;
+                updatedAt?: string;
+              }>;
+            }).publishQueue?.map((item) => ({
+              id: item.id ?? '',
+              videoId: item.videoId ?? '',
+              platform: item.platform ?? 'tiktok',
+              title: item.title ?? '',
+              description: item.description ?? '',
+              publishAt: item.publishAt ?? '',
+              status:
+                item.status === 'published'
+                  ? 'published'
+                  : item.status === 'failed'
+                    ? 'failed'
+                    : item.status === 'scheduled'
+                      ? (item.publishAt && Date.parse(item.publishAt) <= Date.now() ? 'ready' : 'scheduled')
+                      : 'draft',
+              publishedAt: item.publishedAt ?? null,
+              errorMessage: item.errorMessage ?? null,
+              createdAt: item.createdAt ?? item.publishAt ?? '',
+              updatedAt: item.updatedAt ?? item.publishAt ?? '',
+            })) ?? []
           : [],
       createdAt: project.createdAt.toISOString(),
     })),

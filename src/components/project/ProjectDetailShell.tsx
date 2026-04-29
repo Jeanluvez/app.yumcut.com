@@ -39,10 +39,13 @@ type ProjectDetail = {
   publishQueue?: Array<{
     id: string;
     videoId: string;
+    platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
     title: string;
     description: string;
     publishAt: string;
-    status: 'draft' | 'scheduled';
+    status: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
+    publishedAt: string | null;
+    errorMessage: string | null;
     createdAt: string;
     updatedAt: string;
   }>;
@@ -135,6 +138,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [savingRenderOptions, setSavingRenderOptions] = useState(false);
   const [savingPromoInfo, setSavingPromoInfo] = useState(false);
   const [savingPublishQueue, setSavingPublishQueue] = useState(false);
+  const [publishingItemId, setPublishingItemId] = useState<string | null>(null);
   const [draftScripts, setDraftScripts] = useState<Record<string, {
     styleLabel: string;
     hookText: string;
@@ -158,6 +162,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   });
   const [draftPublish, setDraftPublish] = useState({
     videoId: '',
+    platform: 'tiktok' as 'tiktok' | 'instagram_reels' | 'youtube_shorts',
     title: '',
     description: '',
     publishAt: '',
@@ -201,10 +206,11 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       const newestDraft = publishQueue[0];
       setDraftPublish((current) => ({
         videoId: current.videoId || ((result as ProjectDetail).videos[0]?.id ?? ''),
+        platform: newestDraft?.platform ?? current.platform,
         title: newestDraft?.title ?? current.title,
         description: newestDraft?.description ?? current.description,
         publishAt: newestDraft?.publishAt ? newestDraft.publishAt.slice(0, 16) : current.publishAt,
-        status: newestDraft?.status ?? current.status,
+        status: newestDraft?.status === 'scheduled' ? 'scheduled' : 'draft',
       }));
       setLoadError(null);
     } catch (err: any) {
@@ -258,6 +264,14 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     if (status === 'done') return 'success';
     if (status === 'failed') return 'danger';
     if (status === 'pending' || status === 'processing') return 'info';
+    return 'default';
+  }
+
+  function publishBadgeVariant(status: string) {
+    if (status === 'published') return 'success';
+    if (status === 'failed') return 'danger';
+    if (status === 'ready') return 'info';
+    if (status === 'scheduled') return 'default';
     return 'default';
   }
 
@@ -357,10 +371,13 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       const queueEntry = {
         id: editingPublishId ?? crypto.randomUUID(),
         videoId: draftPublish.videoId,
+        platform: draftPublish.platform,
         title: draftPublish.title.trim(),
         description: draftPublish.description.trim(),
         publishAt: new Date(draftPublish.publishAt).toISOString(),
         status: draftPublish.status,
+        publishedAt: existingQueue.find((item) => item.id === editingPublishId)?.publishedAt ?? null,
+        errorMessage: null,
         createdAt: existingQueue.find((item) => item.id === editingPublishId)?.createdAt ?? nowIso,
         updatedAt: nowIso,
       };
@@ -380,6 +397,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       setEditingPublishId(null);
       setDraftPublish({
         videoId: project.videos[0]?.id ?? '',
+        platform: 'tiktok',
         title: '',
         description: '',
         publishAt: '',
@@ -397,11 +415,26 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     setEditingPublishId(item.id);
     setDraftPublish({
       videoId: item.videoId,
+      platform: item.platform,
       title: item.title,
       description: item.description,
       publishAt: item.publishAt.slice(0, 16),
-      status: item.status,
+      status: item.status === 'scheduled' ? 'scheduled' : 'draft',
     });
+  }
+
+  async function handlePublishNow(itemId: string) {
+    setPublishingItemId(itemId);
+    try {
+      await Api.publishProjectQueueItem(projectId, itemId);
+      toast.success('Publish task marked as published');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to publish task');
+      await loadProject();
+    } finally {
+      setPublishingItemId(null);
+    }
   }
 
   async function handleDeletePublishItem(itemId: string) {
@@ -414,6 +447,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         setEditingPublishId(null);
         setDraftPublish({
           videoId: project.videos[0]?.id ?? '',
+          platform: 'tiktok',
           title: '',
           description: '',
           publishAt: '',
@@ -891,7 +925,25 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   className="min-h-[100px]"
                 />
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Platform</div>
+                    <Select
+                      value={draftPublish.platform}
+                      onValueChange={(value: 'tiktok' | 'instagram_reels' | 'youtube_shorts') =>
+                        setDraftPublish((prev) => ({ ...prev, platform: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tiktok">TikTok</SelectItem>
+                        <SelectItem value="instagram_reels">Instagram Reels</SelectItem>
+                        <SelectItem value="youtube_shorts">YouTube Shorts</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 <div className="grid gap-2">
                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Publish Time</div>
                   <Input
@@ -934,6 +986,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       setEditingPublishId(null);
                       setDraftPublish({
                         videoId: project.videos[0]?.id ?? '',
+                        platform: 'tiktok',
                         title: '',
                         description: '',
                         publishAt: '',
@@ -959,7 +1012,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
                         <div className="flex items-center gap-2">
-                          <Badge variant={item.status === 'scheduled' ? 'success' : 'default'}>{item.status}</Badge>
+                          <Badge variant={publishBadgeVariant(item.status)}>{item.status}</Badge>
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEditPublishItem(item)} aria-label="Edit publish task">
                             <PencilLine className="h-4 w-4" />
                           </Button>
@@ -969,10 +1022,32 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                         </div>
                       </div>
                       <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {linkedVideo?.variantLabel || 'Generated video'} • {new Date(item.publishAt).toLocaleString()}
+                        {item.platform.replace(/_/g, ' ')} • {linkedVideo?.variantLabel || 'Generated video'} • {new Date(item.publishAt).toLocaleString()}
                       </div>
+                      {item.publishedAt ? (
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Published at {new Date(item.publishedAt).toLocaleString()}
+                        </div>
+                      ) : null}
+                      {item.errorMessage ? (
+                        <div className="mt-1 text-xs text-red-600 dark:text-red-400">{item.errorMessage}</div>
+                      ) : null}
                       {item.description ? (
                         <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">{item.description}</div>
+                      ) : null}
+                      {item.status !== 'published' ? (
+                        <div className="mt-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePublishNow(item.id)}
+                            disabled={publishingItemId === item.id}
+                          >
+                            {publishingItemId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Publish Now
+                          </Button>
+                        </div>
                       ) : null}
                     </div>
                   );

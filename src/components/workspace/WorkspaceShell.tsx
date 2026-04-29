@@ -67,10 +67,13 @@ type ProjectItem = {
   publishQueue?: Array<{
     id?: string;
     videoId?: string;
+    platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
     title?: string;
     description?: string;
     publishAt?: string;
-    status?: 'draft' | 'scheduled';
+    status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
+    publishedAt?: string | null;
+    errorMessage?: string | null;
     createdAt?: string;
     updatedAt?: string;
   }>;
@@ -81,10 +84,13 @@ type PublishQueueItem = {
   projectId: string;
   projectTitle: string;
   videoId: string;
+  platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
   title: string;
   description: string;
   publishAt: string;
-  status: 'draft' | 'scheduled';
+  status: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
+  publishedAt: string | null;
+  errorMessage: string | null;
   createdAt: string;
 };
 
@@ -144,10 +150,21 @@ export function WorkspaceShell() {
           projectId: project.id,
           projectTitle: project.title || project.name || 'Untitled project',
           videoId: entry.videoId || '',
+          platform: entry.platform || 'tiktok',
           title: entry.title?.trim() || 'Untitled post',
           description: entry.description?.trim() || '',
           publishAt: entry.publishAt || '',
-          status: entry.status === 'scheduled' ? 'scheduled' : 'draft',
+          status: entry.status === 'ready'
+            ? 'ready'
+            : entry.status === 'published'
+              ? 'published'
+              : entry.status === 'failed'
+                ? 'failed'
+                : entry.status === 'scheduled'
+                  ? 'scheduled'
+                  : 'draft',
+          publishedAt: entry.publishedAt ?? null,
+          errorMessage: entry.errorMessage ?? null,
           createdAt: entry.createdAt || '',
         })),
       )
@@ -550,13 +567,20 @@ export function WorkspaceShell() {
                             </span>
                           </div>
                           <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
-                            Project: {item.projectTitle}
+                            {item.platform.replace(/_/g, ' ')} • Project: {item.projectTitle}
                           </div>
                           <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            {item.publishAt ? `Publish at ${new Date(item.publishAt).toLocaleString()}` : 'No publish time set'}
+                            {item.publishedAt
+                              ? `Published at ${new Date(item.publishedAt).toLocaleString()}`
+                              : item.publishAt
+                                ? `Publish at ${new Date(item.publishAt).toLocaleString()}`
+                                : 'No publish time set'}
                           </div>
                           {item.description ? (
                             <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{item.description}</div>
+                          ) : null}
+                          {item.errorMessage ? (
+                            <div className="mt-1 break-words text-xs text-red-600 dark:text-red-400">{item.errorMessage}</div>
                           ) : null}
                         </div>
                         <div className="flex shrink-0 flex-wrap items-center gap-2">
