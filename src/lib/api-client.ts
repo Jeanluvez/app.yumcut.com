@@ -84,6 +84,16 @@ export const Api = {
         animateImages?: boolean;
         shuffleVideoSlices?: boolean;
       };
+      publishQueue?: Array<{
+        id: string;
+        videoId: string;
+        title: string;
+        description: string;
+        publishAt: string;
+        status: 'draft' | 'scheduled';
+        createdAt: string;
+        updatedAt: string;
+      }>;
     },
   ) =>
     api(`/api/projects/${id}`, {

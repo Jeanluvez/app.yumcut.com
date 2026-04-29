@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from 'react';
 import { APP_NAME, CONTACT_EMAIL } from '@/shared/constants/app';
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProviders } from '@/components/providers/SessionProviders';
 import { SettingsProvider } from '@/components/providers/SettingsProvider';
@@ -47,27 +46,17 @@ const DEFAULT_PROJECT_CREATION_SETTINGS: import('@/server/admin/project-creation
   },
 };
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 const APP_TITLE = `${APP_NAME} | Instant Viral Faceless Shorts Builder`;
 const DESCRIPTION =
-  'Create vertical 9:16 videos from ideas or scripts in minutes. Write a prompt, pick a voice and character, and YumCut generates the script, voiceover, visuals and final video for you.';
+  'Create vertical 9:16 ecommerce videos from product ideas in minutes. Sprokl generates scripts, voiceovers, visuals, subtitles, and final export-ready videos for you.';
 
 export const metadata: Metadata = {
   title: APP_TITLE,
   description: DESCRIPTION,
   applicationName: APP_NAME,
-  authors: [{ name: 'YumCut Team' }],
-  creator: 'YumCut',
-  publisher: 'YumCut',
+  authors: [{ name: 'Sprokl Team' }],
+  creator: 'Sprokl',
+  publisher: 'Sprokl',
   keywords: [
     'AI video generator',
     'text to video',
@@ -78,7 +67,7 @@ export const metadata: Metadata = {
     'reels',
     'tiktok video',
     'content creator tools',
-    'YumCut', 'yum cut', 'yumcut', 'yum cat', 'yumcat', 'yam cut', 'yamcut', 'yam cat',
+    'Sprokl', 'sprokl', 'ai video generator', 'ecommerce video maker', 'short-form ads',
   ],
   metadataBase: config.NEXTAUTH_URL ? new URL(config.NEXTAUTH_URL) : undefined,
   alternates: {
@@ -357,7 +346,7 @@ export default async function RootLayout({
         </noscript>
 
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased h-screen overflow-hidden` }>
+      <body className="antialiased h-screen overflow-hidden">
         <UtmSourceTracker />
         <SessionProviders>
           <AppLanguageProvider initialLanguage={initialAppLanguage} allowStoredOverride={!session?.user}>

@@ -36,6 +36,16 @@ type ProjectDetail = {
     animateImages: boolean;
     shuffleVideoSlices: boolean;
   };
+  publishQueue?: Array<{
+    id: string;
+    videoId: string;
+    title: string;
+    description: string;
+    publishAt: string;
+    status: 'draft' | 'scheduled';
+    createdAt: string;
+    updatedAt: string;
+  }>;
   selectedAssetIds: string[];
   hookAssetId: string | null;
   durationSeconds: number;
@@ -124,6 +134,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [savingScriptId, setSavingScriptId] = useState<string | null>(null);
   const [savingRenderOptions, setSavingRenderOptions] = useState(false);
   const [savingPromoInfo, setSavingPromoInfo] = useState(false);
+  const [savingPublishQueue, setSavingPublishQueue] = useState(false);
   const [draftScripts, setDraftScripts] = useState<Record<string, {
     styleLabel: string;
     hookText: string;
@@ -144,6 +155,13 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     originalPrice: '',
     salePrice: '',
     discountLabel: '',
+  });
+  const [draftPublish, setDraftPublish] = useState({
+    videoId: '',
+    title: '',
+    description: '',
+    publishAt: '',
+    status: 'draft' as 'draft' | 'scheduled',
   });
 
   async function loadProject(signal?: { cancelled: boolean }) {
@@ -178,6 +196,15 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         salePrice: (result as ProjectDetail).promoInfo?.salePrice ?? '',
         discountLabel: (result as ProjectDetail).promoInfo?.discountLabel ?? '',
       });
+      const publishQueue = (result as ProjectDetail).publishQueue ?? [];
+      const newestDraft = publishQueue[0];
+      setDraftPublish((current) => ({
+        videoId: current.videoId || ((result as ProjectDetail).videos[0]?.id ?? ''),
+        title: newestDraft?.title ?? current.title,
+        description: newestDraft?.description ?? current.description,
+        publishAt: newestDraft?.publishAt ? newestDraft.publishAt.slice(0, 16) : current.publishAt,
+        status: newestDraft?.status ?? current.status,
+      }));
       setLoadError(null);
     } catch (err: any) {
       if (signal?.cancelled) return;
@@ -304,6 +331,47 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       toast.error(err?.error?.message || 'Failed to update promotion settings');
     } finally {
       setSavingPromoInfo(false);
+    }
+  }
+
+  async function handleSavePublishQueue() {
+    if (!project) return;
+    if (!draftPublish.videoId) {
+      toast.error('Select a generated video first');
+      return;
+    }
+    if (!draftPublish.title.trim()) {
+      toast.error('Publish title is required');
+      return;
+    }
+    if (!draftPublish.publishAt) {
+      toast.error('Publish time is required');
+      return;
+    }
+
+    setSavingPublishQueue(true);
+    try {
+      const existingQueue = project.publishQueue ?? [];
+      const nowIso = new Date().toISOString();
+      const queueEntry = {
+        id: crypto.randomUUID(),
+        videoId: draftPublish.videoId,
+        title: draftPublish.title.trim(),
+        description: draftPublish.description.trim(),
+        publishAt: new Date(draftPublish.publishAt).toISOString(),
+        status: draftPublish.status,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      await Api.updateProject(projectId, {
+        publishQueue: [queueEntry, ...existingQueue].slice(0, 50),
+      });
+      toast.success(draftPublish.status === 'scheduled' ? 'Publish task scheduled' : 'Publish draft saved');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to save publish task');
+    } finally {
+      setSavingPublishQueue(false);
     }
   }
 
@@ -722,6 +790,110 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 ))}
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-col items-start gap-1">
+            <CardTitle>Publish Queue</CardTitle>
+            <CardDescription>Save a publish draft or schedule a future post for a generated video.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4">
+              <div className="grid gap-2">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Video</div>
+                <Select
+                  value={draftPublish.videoId}
+                  onValueChange={(value) => setDraftPublish((prev) => ({ ...prev, videoId: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a generated video" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {project.videos.map((video) => (
+                      <SelectItem key={video.id} value={video.id}>
+                        {video.variantLabel || 'Generated video'} • {video.durationSeconds}s
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Post Title</div>
+                <Input
+                  value={draftPublish.title}
+                  onChange={(event) => setDraftPublish((prev) => ({ ...prev, title: event.target.value }))}
+                  placeholder="Spring launch teaser"
+                  maxLength={160}
+                />
+              </div>
+              <div className="grid gap-2">
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Description</div>
+                <Textarea
+                  value={draftPublish.description}
+                  onChange={(event) => setDraftPublish((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Short caption or posting notes"
+                  maxLength={2000}
+                  className="min-h-[100px]"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Publish Time</div>
+                  <Input
+                    type="datetime-local"
+                    value={draftPublish.publishAt}
+                    onChange={(event) => setDraftPublish((prev) => ({ ...prev, publishAt: event.target.value }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Status</div>
+                  <Select
+                    value={draftPublish.status}
+                    onValueChange={(value: 'draft' | 'scheduled') => setDraftPublish((prev) => ({ ...prev, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="scheduled">Scheduled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <Button type="button" variant="outline" onClick={handleSavePublishQueue} disabled={savingPublishQueue || project.videos.length === 0}>
+                  {savingPublishQueue ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {draftPublish.status === 'scheduled' ? 'Schedule Post' : 'Save Draft'}
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {(project.publishQueue ?? []).length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  No publish drafts yet.
+                </div>
+              ) : (
+                (project.publishQueue ?? []).map((item) => {
+                  const linkedVideo = project.videos.find((video) => video.id === item.videoId);
+                  return (
+                    <div key={item.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
+                        <Badge variant={item.status === 'scheduled' ? 'success' : 'default'}>{item.status}</Badge>
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {linkedVideo?.variantLabel || 'Generated video'} • {new Date(item.publishAt).toLocaleString()}
+                      </div>
+                      {item.description ? (
+                        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">{item.description}</div>
+                      ) : null}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

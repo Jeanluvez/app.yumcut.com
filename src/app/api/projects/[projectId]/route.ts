@@ -24,6 +24,16 @@ const updateProjectAssetsSchema = z.object({
     animateImages: z.boolean().optional(),
     shuffleVideoSlices: z.boolean().optional(),
   }).optional(),
+  publishQueue: z.array(z.object({
+    id: z.string().min(1).max(80),
+    videoId: z.string().uuid(),
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().max(2000).optional().default(''),
+    publishAt: z.string().datetime(),
+    status: z.enum(['draft', 'scheduled']),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })).max(50).optional(),
 });
 
 function normalizeProjectPromoInfo(promoEnabled: boolean, promoInfo: unknown) {
@@ -71,6 +81,39 @@ function normalizeProjectRenderOptions(promoInfo: unknown) {
     animateImages: renderOptions?.animateImages !== false,
     shuffleVideoSlices: renderOptions?.shuffleVideoSlices !== false,
   };
+}
+
+function normalizeProjectPublishQueue(promoInfo: unknown) {
+  const queue =
+    promoInfo && typeof promoInfo === 'object' && 'publishQueue' in promoInfo
+      ? (promoInfo as {
+          publishQueue?: Array<{
+            id?: string;
+            videoId?: string;
+            title?: string;
+            description?: string;
+            publishAt?: string;
+            status?: 'draft' | 'scheduled';
+            createdAt?: string;
+            updatedAt?: string;
+          }>;
+        }).publishQueue
+      : null;
+
+  if (!Array.isArray(queue)) return [];
+
+  return queue
+    .filter((item) => item && typeof item === 'object' && typeof item.videoId === 'string')
+    .map((item) => ({
+      id: item.id ?? '',
+      videoId: item.videoId ?? '',
+      title: item.title ?? '',
+      description: item.description ?? '',
+      publishAt: item.publishAt ?? '',
+      status: item.status === 'scheduled' ? 'scheduled' : 'draft',
+      createdAt: item.createdAt ?? item.publishAt ?? '',
+      updatedAt: item.updatedAt ?? item.publishAt ?? '',
+    }));
 }
 
 export const GET = withApiError(async function GET(req: NextRequest, { params }: { params: Promise<Params> }) {
@@ -180,6 +223,7 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
     promoEnabled: project.promoEnabled,
     promoInfo: normalizeProjectPromoInfo(project.promoEnabled, project.promoInfo),
     renderOptions: normalizeProjectRenderOptions(project.promoInfo),
+    publishQueue: normalizeProjectPublishQueue(project.promoInfo),
     selectedAssetIds: project.selectedAssetIds,
     hookAssetId: project.hookAssetId,
     durationSeconds: project.durationSeconds,
@@ -263,6 +307,7 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
   const promoEnabled = parsed.data.promoEnabled;
   const promoInfoPatch = parsed.data.promoInfo;
   const renderOptionsPatch = parsed.data.renderOptions;
+  const publishQueuePatch = parsed.data.publishQueue;
   const allRequestedIds = Array.from(new Set([
     ...selectedAssetIds,
     ...(hookAssetId ? [hookAssetId] : []),
@@ -327,13 +372,25 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
       }
     : undefined;
 
+  const mergedPromoInfo =
+    nextPromoInfo !== undefined || publishQueuePatch !== undefined
+      ? {
+          ...((nextPromoInfo ?? (
+            (existingProject?.promoInfo && typeof existingProject.promoInfo === 'object')
+              ? existingProject.promoInfo as Record<string, unknown>
+              : {}
+          )) as Record<string, unknown>),
+          ...(publishQueuePatch !== undefined ? { publishQueue: publishQueuePatch } : {}),
+        }
+      : undefined;
+
   const updated = await prisma.project.update({
     where: { id: project.id },
     data: {
       ...(parsed.data.selectedAssetIds !== undefined ? { selectedAssetIds } : {}),
       ...(hookAssetId !== undefined ? { hookAssetId } : {}),
       ...(promoEnabled !== undefined ? { promoEnabled } : {}),
-      ...(nextPromoInfo !== undefined ? { promoInfo: nextPromoInfo } : {}),
+      ...(mergedPromoInfo !== undefined ? { promoInfo: mergedPromoInfo } : {}),
     },
     select: {
       id: true,
@@ -352,6 +409,7 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
     promoEnabled: updated.promoEnabled,
     promoInfo: normalizeProjectPromoInfo(updated.promoEnabled, updated.promoInfo),
     renderOptions: normalizeProjectRenderOptions(updated.promoInfo),
+    publishQueue: normalizeProjectPublishQueue(updated.promoInfo),
     updatedAt: updated.updatedAt.toISOString(),
   });
 }, 'Failed to update project');
