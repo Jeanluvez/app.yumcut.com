@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PencilLine, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Api } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
@@ -163,6 +163,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     publishAt: '',
     status: 'draft' as 'draft' | 'scheduled',
   });
+  const [editingPublishId, setEditingPublishId] = useState<string | null>(null);
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
@@ -354,22 +355,75 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       const existingQueue = project.publishQueue ?? [];
       const nowIso = new Date().toISOString();
       const queueEntry = {
-        id: crypto.randomUUID(),
+        id: editingPublishId ?? crypto.randomUUID(),
         videoId: draftPublish.videoId,
         title: draftPublish.title.trim(),
         description: draftPublish.description.trim(),
         publishAt: new Date(draftPublish.publishAt).toISOString(),
         status: draftPublish.status,
-        createdAt: nowIso,
+        createdAt: existingQueue.find((item) => item.id === editingPublishId)?.createdAt ?? nowIso,
         updatedAt: nowIso,
       };
+      const nextQueue = editingPublishId
+        ? existingQueue.map((item) => (item.id === editingPublishId ? queueEntry : item))
+        : [queueEntry, ...existingQueue].slice(0, 50);
       await Api.updateProject(projectId, {
-        publishQueue: [queueEntry, ...existingQueue].slice(0, 50),
+        publishQueue: nextQueue,
       });
-      toast.success(draftPublish.status === 'scheduled' ? 'Publish task scheduled' : 'Publish draft saved');
+      toast.success(
+        editingPublishId
+          ? 'Publish task updated'
+          : draftPublish.status === 'scheduled'
+            ? 'Publish task scheduled'
+            : 'Publish draft saved',
+      );
+      setEditingPublishId(null);
+      setDraftPublish({
+        videoId: project.videos[0]?.id ?? '',
+        title: '',
+        description: '',
+        publishAt: '',
+        status: 'draft',
+      });
       await loadProject();
     } catch (err: any) {
       toast.error(err?.error?.message || 'Failed to save publish task');
+    } finally {
+      setSavingPublishQueue(false);
+    }
+  }
+
+  function handleEditPublishItem(item: NonNullable<ProjectDetail['publishQueue']>[number]) {
+    setEditingPublishId(item.id);
+    setDraftPublish({
+      videoId: item.videoId,
+      title: item.title,
+      description: item.description,
+      publishAt: item.publishAt.slice(0, 16),
+      status: item.status,
+    });
+  }
+
+  async function handleDeletePublishItem(itemId: string) {
+    if (!project) return;
+    setSavingPublishQueue(true);
+    try {
+      const nextQueue = (project.publishQueue ?? []).filter((item) => item.id !== itemId);
+      await Api.updateProject(projectId, { publishQueue: nextQueue });
+      if (editingPublishId === itemId) {
+        setEditingPublishId(null);
+        setDraftPublish({
+          videoId: project.videos[0]?.id ?? '',
+          title: '',
+          description: '',
+          publishAt: '',
+          status: 'draft',
+        });
+      }
+      toast.success('Publish task deleted');
+      await loadProject();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Failed to delete publish task');
     } finally {
       setSavingPublishQueue(false);
     }
@@ -865,8 +919,31 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
               <div>
                 <Button type="button" variant="outline" onClick={handleSavePublishQueue} disabled={savingPublishQueue || project.videos.length === 0}>
                   {savingPublishQueue ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {draftPublish.status === 'scheduled' ? 'Schedule Post' : 'Save Draft'}
+                  {editingPublishId
+                    ? 'Update Publish Task'
+                    : draftPublish.status === 'scheduled'
+                      ? 'Schedule Post'
+                      : 'Save Draft'}
                 </Button>
+                {editingPublishId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="ml-2"
+                    onClick={() => {
+                      setEditingPublishId(null);
+                      setDraftPublish({
+                        videoId: project.videos[0]?.id ?? '',
+                        title: '',
+                        description: '',
+                        publishAt: '',
+                        status: 'draft',
+                      });
+                    }}
+                  >
+                    Cancel Edit
+                  </Button>
+                ) : null}
               </div>
             </div>
             <div className="space-y-3">
@@ -881,7 +958,15 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                     <div key={item.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
-                        <Badge variant={item.status === 'scheduled' ? 'success' : 'default'}>{item.status}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={item.status === 'scheduled' ? 'success' : 'default'}>{item.status}</Badge>
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEditPublishItem(item)} aria-label="Edit publish task">
+                            <PencilLine className="h-4 w-4" />
+                          </Button>
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-red-600" onClick={() => handleDeletePublishItem(item.id)} aria-label="Delete publish task">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                       <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         {linkedVideo?.variantLabel || 'Generated video'} • {new Date(item.publishAt).toLocaleString()}
