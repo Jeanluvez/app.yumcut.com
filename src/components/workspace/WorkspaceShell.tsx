@@ -74,6 +74,9 @@ type ProjectItem = {
     publishAt?: string;
     status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
     publishedAt?: string | null;
+    providerPostId?: string | null;
+    publishedUrl?: string | null;
+    lastAttemptAt?: string | null;
     errorMessage?: string | null;
     createdAt?: string;
     updatedAt?: string;
@@ -92,6 +95,9 @@ type PublishQueueItem = {
   publishAt: string;
   status: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
   publishedAt: string | null;
+  providerPostId: string | null;
+  publishedUrl: string | null;
+  lastAttemptAt: string | null;
   errorMessage: string | null;
   createdAt: string;
 };
@@ -189,6 +195,9 @@ export function WorkspaceShell() {
                   ? 'scheduled'
                   : 'draft',
           publishedAt: entry.publishedAt ?? null,
+          providerPostId: entry.providerPostId ?? null,
+          publishedUrl: entry.publishedUrl ?? null,
+          lastAttemptAt: entry.lastAttemptAt ?? null,
           errorMessage: entry.errorMessage ?? null,
           createdAt: entry.createdAt || '',
         })),
@@ -830,6 +839,29 @@ export function WorkspaceShell() {
                                 ? `Publish at ${new Date(item.publishAt).toLocaleString()}`
                                 : 'No publish time set'}
                           </div>
+                          {item.lastAttemptAt ? (
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Last attempt at {new Date(item.lastAttemptAt).toLocaleString()}
+                            </div>
+                          ) : null}
+                          {item.providerPostId ? (
+                            <div className="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">
+                              Provider post ID: {item.providerPostId}
+                            </div>
+                          ) : null}
+                          {item.publishedUrl ? (
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Published link:{' '}
+                              <a
+                                href={item.publishedUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 hover:underline dark:text-blue-400"
+                              >
+                                Open post
+                              </a>
+                            </div>
+                          ) : null}
                           {item.description ? (
                             <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{item.description}</div>
                           ) : null}

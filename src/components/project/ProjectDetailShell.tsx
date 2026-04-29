@@ -46,6 +46,9 @@ type ProjectDetail = {
     publishAt: string;
     status: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
     publishedAt: string | null;
+    providerPostId: string | null;
+    publishedUrl: string | null;
+    lastAttemptAt: string | null;
     errorMessage: string | null;
     createdAt: string;
     updatedAt: string;
@@ -128,6 +131,19 @@ function formatBytes(value: string) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function toLocalDateTimeInputValue(value?: string | null) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -174,10 +190,20 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     channelId: '' as string,
     title: '',
     description: '',
-    publishAt: '',
+    publishAt: toLocalDateTimeInputValue(),
     status: 'draft' as 'draft' | 'scheduled',
   });
   const [editingPublishId, setEditingPublishId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftPublish((current) => {
+      if (current.publishAt) return current;
+      return {
+        ...current,
+        publishAt: toLocalDateTimeInputValue(),
+      };
+    });
+  }, []);
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
@@ -222,16 +248,20 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         discountLabel: (result as ProjectDetail).promoInfo?.discountLabel ?? '',
       });
       const publishQueue = (result as ProjectDetail).publishQueue ?? [];
-      const newestDraft = publishQueue[0];
-      setDraftPublish((current) => ({
-        videoId: current.videoId || ((result as ProjectDetail).videos[0]?.id ?? ''),
-        platform: newestDraft?.platform ?? current.platform,
-        channelId: newestDraft?.channelId ?? current.channelId,
-        title: newestDraft?.title ?? current.title,
-        description: newestDraft?.description ?? current.description,
-        publishAt: newestDraft?.publishAt ? newestDraft.publishAt.slice(0, 16) : current.publishAt,
-        status: newestDraft?.status === 'scheduled' ? 'scheduled' : 'draft',
-      }));
+      setDraftPublish((current) => {
+        if (editingPublishId) {
+          return current;
+        }
+        return {
+          videoId: current.videoId || ((result as ProjectDetail).videos[0]?.id ?? ''),
+          platform: current.platform || 'tiktok',
+          channelId: current.channelId || '',
+          title: '',
+          description: '',
+          publishAt: toLocalDateTimeInputValue(),
+          status: 'draft',
+        };
+      });
       setLoadError(null);
     } catch (err: any) {
       if (signal?.cancelled) return;
@@ -387,6 +417,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     setSavingPublishQueue(true);
     try {
       const existingQueue = project.publishQueue ?? [];
+      const existingItem = existingQueue.find((item) => item.id === editingPublishId);
       const nowIso = new Date().toISOString();
       const queueEntry = {
         id: editingPublishId ?? crypto.randomUUID(),
@@ -397,9 +428,12 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         description: draftPublish.description.trim(),
         publishAt: new Date(draftPublish.publishAt).toISOString(),
         status: draftPublish.status,
-        publishedAt: existingQueue.find((item) => item.id === editingPublishId)?.publishedAt ?? null,
+        publishedAt: existingItem?.publishedAt ?? null,
+        providerPostId: existingItem?.providerPostId ?? null,
+        publishedUrl: existingItem?.publishedUrl ?? null,
+        lastAttemptAt: existingItem?.lastAttemptAt ?? null,
         errorMessage: null,
-        createdAt: existingQueue.find((item) => item.id === editingPublishId)?.createdAt ?? nowIso,
+        createdAt: existingItem?.createdAt ?? nowIso,
         updatedAt: nowIso,
       };
       const nextQueue = editingPublishId
@@ -422,7 +456,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         channelId: '',
         title: '',
         description: '',
-        publishAt: '',
+        publishAt: toLocalDateTimeInputValue(),
         status: 'draft',
       });
       await loadProject();
@@ -441,7 +475,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       channelId: item.channelId ?? '',
       title: item.title,
       description: item.description,
-      publishAt: item.publishAt.slice(0, 16),
+      publishAt: toLocalDateTimeInputValue(item.publishAt),
       status: item.status === 'scheduled' ? 'scheduled' : 'draft',
     });
   }
@@ -471,9 +505,10 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         setDraftPublish({
           videoId: project.videos[0]?.id ?? '',
           platform: 'tiktok',
+          channelId: '',
           title: '',
           description: '',
-          publishAt: '',
+          publishAt: toLocalDateTimeInputValue(),
           status: 'draft',
         });
       }
@@ -1034,7 +1069,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                         channelId: '',
                         title: '',
                         description: '',
-                        publishAt: '',
+                        publishAt: toLocalDateTimeInputValue(),
                         status: 'draft',
                       });
                     }}
@@ -1076,6 +1111,29 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       {item.publishedAt ? (
                         <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           Published at {new Date(item.publishedAt).toLocaleString()}
+                        </div>
+                      ) : null}
+                      {item.lastAttemptAt ? (
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Last attempt at {new Date(item.lastAttemptAt).toLocaleString()}
+                        </div>
+                      ) : null}
+                      {item.providerPostId ? (
+                        <div className="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">
+                          Provider post ID: {item.providerPostId}
+                        </div>
+                      ) : null}
+                      {item.publishedUrl ? (
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Published link:{' '}
+                          <a
+                            href={item.publishedUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            Open post
+                          </a>
                         </div>
                       ) : null}
                       {item.errorMessage ? (
