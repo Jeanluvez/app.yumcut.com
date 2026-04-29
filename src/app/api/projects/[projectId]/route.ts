@@ -34,6 +34,9 @@ const updateProjectAssetsSchema = z.object({
     publishAt: z.string().datetime(),
     status: z.enum(['draft', 'scheduled', 'ready', 'published', 'failed']),
     publishedAt: z.string().datetime().nullable().optional(),
+    providerPostId: z.string().trim().max(191).nullable().optional(),
+    publishedUrl: z.string().trim().max(2000).nullable().optional(),
+    lastAttemptAt: z.string().datetime().nullable().optional(),
     errorMessage: z.string().trim().max(500).nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
@@ -118,6 +121,9 @@ function normalizeProjectPublishQueue(promoInfo: unknown) {
             publishAt?: string;
             status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
             publishedAt?: string | null;
+            providerPostId?: string | null;
+            publishedUrl?: string | null;
+            lastAttemptAt?: string | null;
             errorMessage?: string | null;
             createdAt?: string;
             updatedAt?: string;
@@ -139,6 +145,9 @@ function normalizeProjectPublishQueue(promoInfo: unknown) {
       publishAt: item.publishAt ?? '',
       status: derivePublishQueueStatus(item),
       publishedAt: item.publishedAt ?? null,
+      providerPostId: item.providerPostId ?? null,
+      publishedUrl: item.publishedUrl ?? null,
+      lastAttemptAt: item.lastAttemptAt ?? null,
       errorMessage: item.errorMessage ?? null,
       createdAt: item.createdAt ?? item.publishAt ?? '',
       updatedAt: item.updatedAt ?? item.publishAt ?? '',

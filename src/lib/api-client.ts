@@ -137,8 +137,11 @@ export const Api = {
         title: string;
         description: string;
         publishAt: string;
-        status: 'draft' | 'scheduled' | 'published' | 'failed';
+        status: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
         publishedAt?: string | null;
+        providerPostId?: string | null;
+        publishedUrl?: string | null;
+        lastAttemptAt?: string | null;
         errorMessage?: string | null;
         createdAt: string;
         updatedAt: string;

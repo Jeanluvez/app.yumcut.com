@@ -39,13 +39,16 @@ export const GET = withApiError(async function GET(req: NextRequest) {
                 channelId?: string | null;
                 title?: string;
                 description?: string;
-                publishAt?: string;
-                status?: 'draft' | 'scheduled' | 'published' | 'failed';
-                publishedAt?: string | null;
-                errorMessage?: string | null;
-                createdAt?: string;
-                updatedAt?: string;
-              }>;
+              publishAt?: string;
+              status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
+              publishedAt?: string | null;
+              providerPostId?: string | null;
+              publishedUrl?: string | null;
+              lastAttemptAt?: string | null;
+              errorMessage?: string | null;
+              createdAt?: string;
+              updatedAt?: string;
+            }>;
             }).publishQueue?.map((item) => ({
               id: item.id ?? '',
               videoId: item.videoId ?? '',
@@ -65,6 +68,9 @@ export const GET = withApiError(async function GET(req: NextRequest) {
                       ? (item.publishAt && Date.parse(item.publishAt) <= Date.now() ? 'ready' : 'scheduled')
                       : 'draft',
               publishedAt: item.publishedAt ?? null,
+              providerPostId: item.providerPostId ?? null,
+              publishedUrl: item.publishedUrl ?? null,
+              lastAttemptAt: item.lastAttemptAt ?? null,
               errorMessage: item.errorMessage ?? null,
               createdAt: item.createdAt ?? item.publishAt ?? '',
               updatedAt: item.updatedAt ?? item.publishAt ?? '',

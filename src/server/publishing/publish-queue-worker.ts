@@ -10,6 +10,9 @@ type PublishQueueItem = {
   publishAt?: string;
   status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
   publishedAt?: string | null;
+  providerPostId?: string | null;
+  publishedUrl?: string | null;
+  lastAttemptAt?: string | null;
   errorMessage?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -34,6 +37,11 @@ function readQueue(promoInfo: unknown): PublishQueueItem[] {
   }
   const queue = (promoInfo as { publishQueue?: unknown }).publishQueue;
   return Array.isArray(queue) ? (queue as PublishQueueItem[]) : [];
+}
+
+function buildMockProviderPostId(item: PublishQueueItem, now: Date) {
+  const itemId = item.id?.trim() || item.videoId?.trim() || 'publish-task';
+  return `${item.platform ?? 'tiktok'}-${itemId}-${now.getTime()}`;
 }
 
 export async function processPublishQueue(options: PublishQueueWorkerOptions = {}): Promise<PublishQueueWorkerResult> {
@@ -84,12 +92,15 @@ export async function processPublishQueue(options: PublishQueueWorkerOptions = {
       }
 
       if (options.publishReady && nextItem.status === 'ready') {
+        nextItem.lastAttemptAt = nowIso;
         const hasVideo = typeof nextItem.videoId === 'string' && availableVideoIds.has(nextItem.videoId);
         const channelStatus = nextItem.channelId ? availableChannels.get(nextItem.channelId) : 'connected';
         if (!hasVideo) {
           nextItem.status = 'failed';
           nextItem.errorMessage = 'Linked video could not be found for this publish task.';
           nextItem.publishedAt = null;
+          nextItem.providerPostId = null;
+          nextItem.publishedUrl = null;
           nextItem.updatedAt = nowIso;
           projectChanged = true;
           failedTransitions += 1;
@@ -99,6 +110,8 @@ export async function processPublishQueue(options: PublishQueueWorkerOptions = {
           nextItem.status = 'failed';
           nextItem.errorMessage = 'Linked channel is disconnected.';
           nextItem.publishedAt = null;
+          nextItem.providerPostId = null;
+          nextItem.publishedUrl = null;
           nextItem.updatedAt = nowIso;
           projectChanged = true;
           failedTransitions += 1;
@@ -106,6 +119,8 @@ export async function processPublishQueue(options: PublishQueueWorkerOptions = {
         }
         nextItem.status = 'published';
         nextItem.publishedAt = nowIso;
+        nextItem.providerPostId = buildMockProviderPostId(nextItem, now);
+        nextItem.publishedUrl = null;
         nextItem.errorMessage = null;
         nextItem.updatedAt = nowIso;
         projectChanged = true;

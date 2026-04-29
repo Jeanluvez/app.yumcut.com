@@ -13,15 +13,24 @@ type PublishQueueItem = {
   id?: string;
   videoId?: string;
   platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+  channelId?: string | null;
   title?: string;
   description?: string;
   publishAt?: string;
-  status?: 'draft' | 'scheduled' | 'published' | 'failed';
+  status?: 'draft' | 'scheduled' | 'ready' | 'published' | 'failed';
   publishedAt?: string | null;
+  providerPostId?: string | null;
+  publishedUrl?: string | null;
+  lastAttemptAt?: string | null;
   errorMessage?: string | null;
   createdAt?: string;
   updatedAt?: string;
 };
+
+function buildMockProviderPostId(item: PublishQueueItem, now: Date) {
+  const itemId = item.id?.trim() || item.videoId?.trim() || 'publish-task';
+  return `${item.platform ?? 'tiktok'}-${itemId}-${now.getTime()}`;
+}
 
 export const POST = withApiError(async function POST(req: NextRequest, { params }: { params: Promise<Params> }) {
   const auth = await authenticateApiRequest(req);
@@ -35,6 +44,13 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
       promoInfo: true,
       videos: {
         select: { id: true },
+      },
+      user: {
+        select: {
+          channels: {
+            select: { id: true, status: true },
+          },
+        },
       },
     },
   });
@@ -54,6 +70,7 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
 
   const nowIso = new Date().toISOString();
   const videoExists = project.videos.some((video) => video.id === queueItem.videoId);
+  const channelStatus = queueItem.channelId ? project.user?.channels.find((channel) => channel.id === queueItem.channelId)?.status : 'connected';
   const nextQueue = queue.map((item) => {
     if (item?.id !== itemId) return item;
     if (!videoExists) {
@@ -61,7 +78,22 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
         ...item,
         status: 'failed' as const,
         publishedAt: null,
+        providerPostId: null,
+        publishedUrl: null,
+        lastAttemptAt: nowIso,
         errorMessage: 'Linked video could not be found for this publish task.',
+        updatedAt: nowIso,
+      };
+    }
+    if (item.channelId && channelStatus !== 'connected') {
+      return {
+        ...item,
+        status: 'failed' as const,
+        publishedAt: null,
+        providerPostId: null,
+        publishedUrl: null,
+        lastAttemptAt: nowIso,
+        errorMessage: 'Linked channel is disconnected.',
         updatedAt: nowIso,
       };
     }
@@ -69,6 +101,9 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
       ...item,
       status: 'published' as const,
       publishedAt: nowIso,
+      providerPostId: buildMockProviderPostId(item, new Date(nowIso)),
+      publishedUrl: null,
+      lastAttemptAt: nowIso,
       errorMessage: null,
       updatedAt: nowIso,
     };
@@ -86,6 +121,9 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
 
   if (!videoExists) {
     return error('PUBLISH_FAILED', 'Linked video could not be found. The publish task was marked as failed.', 400);
+  }
+  if (queueItem.channelId && channelStatus !== 'connected') {
+    return error('PUBLISH_FAILED', 'Linked channel is disconnected. The publish task was marked as failed.', 400);
   }
 
   return ok({
