@@ -20,6 +20,7 @@
     "tokens:adjust": "tsx scripts/manage-tokens.ts",
     "daemon": "tsx scripts/daemon/index.ts",
     "video-jobs:worker": "tsx scripts/video-jobs-worker.ts",
+    "publish-queue:worker": "tsx scripts/publish-queue-worker.ts",
     "publish-daemon": "tsx scripts/publish-daemon/index.ts",
     "daemon:cleanup": "tsx scripts/daemon/cleanup-stale-jobs.ts",
     "admin:set": "tsx scripts/set-admin.ts",
