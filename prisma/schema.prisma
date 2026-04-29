@@ -55,6 +55,17 @@ enum JobStatus {
   failed
 }
 
+enum ChannelPlatform {
+  tiktok
+  instagram_reels
+  youtube_shorts
+}
+
+enum ChannelStatus {
+  connected
+  disconnected
+}
+
 // ============================================================
 // 1. USERS
 // ============================================================
@@ -78,6 +89,7 @@ model User {
   projects                 Project[]
   assets                   Asset[]
   videos                   Video[]
+  channels                 ChannelConnection[]
 
   @@map("users")
 }
@@ -265,4 +277,23 @@ model Video {
   project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("videos")
+}
+
+// ============================================================
+// 7. CHANNEL CONNECTIONS（发布账号连接）
+// ============================================================
+
+model ChannelConnection {
+  id          String          @id @default(uuid())
+  userId      String          @map("user_id")
+  platform    ChannelPlatform
+  displayName String         @map("display_name")
+  handle      String? 
+  status      ChannelStatus   @default(connected)
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("channel_connections")
 }

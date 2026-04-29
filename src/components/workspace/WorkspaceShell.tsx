@@ -68,6 +68,7 @@ type ProjectItem = {
     id?: string;
     videoId?: string;
     platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+    channelId?: string | null;
     title?: string;
     description?: string;
     publishAt?: string;
@@ -85,6 +86,7 @@ type PublishQueueItem = {
   projectTitle: string;
   videoId: string;
   platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+  channelId: string | null;
   title: string;
   description: string;
   publishAt: string;
@@ -92,6 +94,16 @@ type PublishQueueItem = {
   publishedAt: string | null;
   errorMessage: string | null;
   createdAt: string;
+};
+
+type ChannelItem = {
+  id: string;
+  platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+  displayName: string;
+  handle: string | null;
+  status: 'connected' | 'disconnected';
+  createdAt: string;
+  updatedAt: string;
 };
 
 const initialForm: FormState = {
@@ -133,6 +145,16 @@ export function WorkspaceShell() {
   const [assetToDelete, setAssetToDelete] = useState<AssetItem | null>(null);
   const [publishingItemId, setPublishingItemId] = useState<string | null>(null);
   const [publishingAllReady, setPublishingAllReady] = useState(false);
+  const [channels, setChannels] = useState<ChannelItem[]>([]);
+  const [channelsLoading, setChannelsLoading] = useState(true);
+  const [creatingChannel, setCreatingChannel] = useState(false);
+  const [updatingChannelId, setUpdatingChannelId] = useState<string | null>(null);
+  const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
+  const [channelForm, setChannelForm] = useState({
+    platform: 'tiktok' as 'tiktok' | 'instagram_reels' | 'youtube_shorts',
+    displayName: '',
+    handle: '',
+  });
 
   const projectCountLabel = useMemo(() => `${items.length} project${items.length === 1 ? '' : 's'}`, [items.length]);
   const videoCountLabel = useMemo(() => `${videos.length} video${videos.length === 1 ? '' : 's'}`, [videos.length]);
@@ -153,6 +175,7 @@ export function WorkspaceShell() {
           projectTitle: project.title || project.name || 'Untitled project',
           videoId: entry.videoId || '',
           platform: entry.platform || 'tiktok',
+          channelId: entry.channelId ?? null,
           title: entry.title?.trim() || 'Untitled post',
           description: entry.description?.trim() || '',
           publishAt: entry.publishAt || '',
@@ -179,6 +202,10 @@ export function WorkspaceShell() {
   const publishCountLabel = useMemo(
     () => `${publishQueueItems.length} item${publishQueueItems.length === 1 ? '' : 's'}`,
     [publishQueueItems.length],
+  );
+  const channelCountLabel = useMemo(
+    () => `${channels.length} channel${channels.length === 1 ? '' : 's'}`,
+    [channels.length],
   );
   const readyPublishItems = useMemo(
     () => publishQueueItems.filter((item) => item.status === 'ready'),
@@ -218,6 +245,22 @@ export function WorkspaceShell() {
     refresh();
   }, [refresh]);
 
+  async function loadChannels() {
+    setChannelsLoading(true);
+    try {
+      const result = await Api.getChannels();
+      setChannels(Array.isArray(result) ? (result as ChannelItem[]) : []);
+    } catch {
+      setChannels([]);
+    } finally {
+      setChannelsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadChannels();
+  }, []);
+
   async function handleDeleteVideo(videoId: string) {
     setDeletingVideoId(videoId);
     try {
@@ -243,6 +286,53 @@ export function WorkspaceShell() {
     } finally {
       setDeletingAssetId(null);
       setAssetToDelete(null);
+    }
+  }
+
+  async function handleCreateChannel(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCreatingChannel(true);
+    try {
+      await Api.createChannel({
+        platform: channelForm.platform,
+        displayName: channelForm.displayName.trim(),
+        handle: channelForm.handle.trim(),
+      });
+      toast.success('Channel created');
+      setChannelForm({ platform: 'tiktok', displayName: '', handle: '' });
+      await loadChannels();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Could not create channel. Please try again.');
+    } finally {
+      setCreatingChannel(false);
+    }
+  }
+
+  async function handleToggleChannelStatus(channel: ChannelItem) {
+    setUpdatingChannelId(channel.id);
+    try {
+      await Api.updateChannel(channel.id, {
+        status: channel.status === 'connected' ? 'disconnected' : 'connected',
+      });
+      toast.success(channel.status === 'connected' ? 'Channel disconnected' : 'Channel reconnected');
+      await loadChannels();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Could not update channel status. Please try again.');
+    } finally {
+      setUpdatingChannelId(null);
+    }
+  }
+
+  async function handleDeleteChannel(channelId: string) {
+    setDeletingChannelId(channelId);
+    try {
+      await Api.deleteChannel(channelId);
+      toast.success('Channel deleted');
+      await loadChannels();
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Could not delete channel. Please try again.');
+    } finally {
+      setDeletingChannelId(null);
     }
   }
 
@@ -458,6 +548,111 @@ export function WorkspaceShell() {
 
           <Card>
             <CardHeader className="flex-col items-start gap-1">
+              <CardTitle>Channels</CardTitle>
+              <CardDescription>{channelsLoading ? 'Loading channels...' : channelCountLabel}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <form className="grid gap-4 rounded-lg border border-dashed border-gray-200 p-4 dark:border-gray-800" onSubmit={handleCreateChannel}>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="grid gap-2">
+                    <Label>Platform</Label>
+                    <Select
+                      value={channelForm.platform}
+                      onValueChange={(value: 'tiktok' | 'instagram_reels' | 'youtube_shorts') =>
+                        setChannelForm((prev) => ({ ...prev, platform: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tiktok">TikTok</SelectItem>
+                        <SelectItem value="instagram_reels">Instagram Reels</SelectItem>
+                        <SelectItem value="youtube_shorts">YouTube Shorts</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Display Name</Label>
+                    <Input
+                      value={channelForm.displayName}
+                      onChange={(event) => setChannelForm((prev) => ({ ...prev, displayName: event.target.value }))}
+                      placeholder="Main TikTok Account"
+                      maxLength={120}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Handle</Label>
+                    <Input
+                      value={channelForm.handle}
+                      onChange={(event) => setChannelForm((prev) => ({ ...prev, handle: event.target.value }))}
+                      placeholder="@sprokl"
+                      maxLength={120}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button type="submit" variant="outline" disabled={creatingChannel}>
+                    {creatingChannel ? 'Creating...' : 'Add Channel'}
+                  </Button>
+                </div>
+              </form>
+
+              {channels.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  No channels connected yet.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {channels.map((channel) => (
+                    <div key={channel.id} className="min-w-0 rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{channel.displayName}</div>
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                              {channel.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {channel.platform.replace(/_/g, ' ')}{channel.handle ? ` • ${channel.handle}` : ''}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={updatingChannelId === channel.id}
+                            onClick={() => void handleToggleChannelStatus(channel)}
+                          >
+                            {updatingChannelId === channel.id
+                              ? 'Saving...'
+                              : channel.status === 'connected'
+                                ? 'Disconnect'
+                                : 'Reconnect'}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={deletingChannelId === channel.id}
+                            onClick={() => void handleDeleteChannel(channel.id)}
+                          >
+                            {deletingChannelId === channel.id ? 'Deleting...' : 'Delete'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-col items-start gap-1">
               <CardTitle>My Videos</CardTitle>
               <CardDescription>{videosLoading ? 'Loading videos...' : videoCountLabel}</CardDescription>
             </CardHeader>
@@ -610,10 +805,12 @@ export function WorkspaceShell() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {publishQueueItems.map((item) => (
-                    <div key={item.id} className="min-w-0 rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 flex-1">
+                  {publishQueueItems.map((item) => {
+                    const linkedChannel = channels.find((channel) => channel.id === item.channelId);
+                    return (
+                      <div key={item.id} className="min-w-0 rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
                             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -622,6 +819,9 @@ export function WorkspaceShell() {
                           </div>
                           <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
                             {item.platform.replace(/_/g, ' ')} • Project: {item.projectTitle}
+                          </div>
+                          <div className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">
+                            Channel: {linkedChannel ? `${linkedChannel.displayName}${linkedChannel.handle ? ` (${linkedChannel.handle})` : ''}` : 'Unassigned'}
                           </div>
                           <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             {item.publishedAt
@@ -637,29 +837,30 @@ export function WorkspaceShell() {
                             <div className="mt-1 break-words text-xs text-red-600 dark:text-red-400">{item.errorMessage}</div>
                           ) : null}
                         </div>
-                        <div className="flex shrink-0 flex-wrap items-center gap-2">
-                          {item.status === 'ready' || item.status === 'failed' ? (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void handlePublishQueueItem(item)}
-                              disabled={publishingItemId === item.id || publishingAllReady}
-                            >
-                              {publishingItemId === item.id
-                                ? 'Publishing...'
-                                : item.status === 'failed'
-                                  ? 'Retry Failed'
-                                  : 'Publish Now'}
+                          <div className="flex shrink-0 flex-wrap items-center gap-2">
+                            {item.status === 'ready' || item.status === 'failed' ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handlePublishQueueItem(item)}
+                                disabled={publishingItemId === item.id || publishingAllReady}
+                              >
+                                {publishingItemId === item.id
+                                  ? 'Publishing...'
+                                  : item.status === 'failed'
+                                    ? 'Retry Failed'
+                                    : 'Publish Now'}
+                              </Button>
+                            ) : null}
+                            <Button asChild size="sm" variant="ghost">
+                              <Link href={`/project/${item.projectId}`}>Open Project</Link>
                             </Button>
-                          ) : null}
-                          <Button asChild size="sm" variant="ghost">
-                            <Link href={`/project/${item.projectId}`}>Open Project</Link>
-                          </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

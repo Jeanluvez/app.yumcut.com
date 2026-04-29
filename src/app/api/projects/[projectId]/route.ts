@@ -28,6 +28,7 @@ const updateProjectAssetsSchema = z.object({
     id: z.string().min(1).max(80),
     videoId: z.string().uuid(),
     platform: z.enum(['tiktok', 'instagram_reels', 'youtube_shorts']).optional().default('tiktok'),
+    channelId: z.string().uuid().nullable().optional(),
     title: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).optional().default(''),
     publishAt: z.string().datetime(),
@@ -111,6 +112,7 @@ function normalizeProjectPublishQueue(promoInfo: unknown) {
             id?: string;
             videoId?: string;
             platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+            channelId?: string | null;
             title?: string;
             description?: string;
             publishAt?: string;
@@ -131,6 +133,7 @@ function normalizeProjectPublishQueue(promoInfo: unknown) {
       id: item.id ?? '',
       videoId: item.videoId ?? '',
       platform: item.platform ?? 'tiktok',
+      channelId: item.channelId ?? null,
       title: item.title ?? '',
       description: item.description ?? '',
       publishAt: item.publishAt ?? '',

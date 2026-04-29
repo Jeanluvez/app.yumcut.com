@@ -36,6 +36,7 @@ export const GET = withApiError(async function GET(req: NextRequest) {
                 id?: string;
                 videoId?: string;
                 platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+                channelId?: string | null;
                 title?: string;
                 description?: string;
                 publishAt?: string;
@@ -49,6 +50,7 @@ export const GET = withApiError(async function GET(req: NextRequest) {
               id: item.id ?? '',
               videoId: item.videoId ?? '',
               platform: item.platform ?? 'tiktok',
+              channelId: item.channelId ?? null,
               title: item.title ?? '',
               description: item.description ?? '',
               publishAt: item.publishAt ?? '',

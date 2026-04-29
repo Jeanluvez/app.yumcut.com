@@ -40,6 +40,7 @@ type ProjectDetail = {
     id: string;
     videoId: string;
     platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+    channelId: string | null;
     title: string;
     description: string;
     publishAt: string;
@@ -139,6 +140,13 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [savingPromoInfo, setSavingPromoInfo] = useState(false);
   const [savingPublishQueue, setSavingPublishQueue] = useState(false);
   const [publishingItemId, setPublishingItemId] = useState<string | null>(null);
+  const [channels, setChannels] = useState<Array<{
+    id: string;
+    platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+    displayName: string;
+    handle: string | null;
+    status: 'connected' | 'disconnected';
+  }>>([]);
   const [draftScripts, setDraftScripts] = useState<Record<string, {
     styleLabel: string;
     hookText: string;
@@ -163,6 +171,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const [draftPublish, setDraftPublish] = useState({
     videoId: '',
     platform: 'tiktok' as 'tiktok' | 'instagram_reels' | 'youtube_shorts',
+    channelId: '' as string,
     title: '',
     description: '',
     publishAt: '',
@@ -172,9 +181,19 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
 
   async function loadProject(signal?: { cancelled: boolean }) {
     try {
-      const result = await Api.getProject(projectId);
+      const [projectResult, channelsResult] = await Promise.all([Api.getProject(projectId), Api.getChannels()]);
+      const result = projectResult;
       if (signal?.cancelled) return;
       setProject(result as ProjectDetail);
+      setChannels(
+        (Array.isArray(channelsResult) ? channelsResult : []).map((channel: any) => ({
+          id: channel.id,
+          platform: channel.platform,
+          displayName: channel.displayName,
+          handle: channel.handle,
+          status: channel.status,
+        })),
+      );
       const nextDrafts = Object.fromEntries(
         ((result as ProjectDetail).scripts || []).map((script) => [
           script.id,
@@ -207,6 +226,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       setDraftPublish((current) => ({
         videoId: current.videoId || ((result as ProjectDetail).videos[0]?.id ?? ''),
         platform: newestDraft?.platform ?? current.platform,
+        channelId: newestDraft?.channelId ?? current.channelId,
         title: newestDraft?.title ?? current.title,
         description: newestDraft?.description ?? current.description,
         publishAt: newestDraft?.publishAt ? newestDraft.publishAt.slice(0, 16) : current.publishAt,
@@ -372,6 +392,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         id: editingPublishId ?? crypto.randomUUID(),
         videoId: draftPublish.videoId,
         platform: draftPublish.platform,
+        channelId: draftPublish.channelId || null,
         title: draftPublish.title.trim(),
         description: draftPublish.description.trim(),
         publishAt: new Date(draftPublish.publishAt).toISOString(),
@@ -398,6 +419,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
       setDraftPublish({
         videoId: project.videos[0]?.id ?? '',
         platform: 'tiktok',
+        channelId: '',
         title: '',
         description: '',
         publishAt: '',
@@ -416,6 +438,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     setDraftPublish({
       videoId: item.videoId,
       platform: item.platform,
+      channelId: item.channelId ?? '',
       title: item.title,
       description: item.description,
       publishAt: item.publishAt.slice(0, 16),
@@ -925,25 +948,46 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   className="min-h-[100px]"
                 />
               </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="grid gap-2">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Platform</div>
-                    <Select
-                      value={draftPublish.platform}
-                      onValueChange={(value: 'tiktok' | 'instagram_reels' | 'youtube_shorts') =>
-                        setDraftPublish((prev) => ({ ...prev, platform: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select platform" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tiktok">TikTok</SelectItem>
-                        <SelectItem value="instagram_reels">Instagram Reels</SelectItem>
-                        <SelectItem value="youtube_shorts">YouTube Shorts</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Platform</div>
+                  <Select
+                    value={draftPublish.platform}
+                    onValueChange={(value: 'tiktok' | 'instagram_reels' | 'youtube_shorts') =>
+                      setDraftPublish((prev) => ({ ...prev, platform: value, channelId: '' }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select platform" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tiktok">TikTok</SelectItem>
+                      <SelectItem value="instagram_reels">Instagram Reels</SelectItem>
+                      <SelectItem value="youtube_shorts">YouTube Shorts</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Channel</div>
+                  <Select
+                    value={draftPublish.channelId || '__none__'}
+                    onValueChange={(value) => setDraftPublish((prev) => ({ ...prev, channelId: value === '__none__' ? '' : value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select channel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">No channel selected</SelectItem>
+                      {channels
+                        .filter((channel) => channel.platform === draftPublish.platform)
+                        .map((channel) => (
+                          <SelectItem key={channel.id} value={channel.id}>
+                            {channel.displayName}{channel.handle ? ` (${channel.handle})` : ''}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="grid gap-2">
                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Publish Time</div>
                   <Input
@@ -987,6 +1031,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       setDraftPublish({
                         videoId: project.videos[0]?.id ?? '',
                         platform: 'tiktok',
+                        channelId: '',
                         title: '',
                         description: '',
                         publishAt: '',
@@ -1007,6 +1052,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
               ) : (
                 (project.publishQueue ?? []).map((item) => {
                   const linkedVideo = project.videos.find((video) => video.id === item.videoId);
+                  const linkedChannel = channels.find((channel) => channel.id === item.channelId);
                   return (
                     <div key={item.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
                       <div className="flex items-center justify-between gap-3">
@@ -1023,6 +1069,9 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       </div>
                       <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         {item.platform.replace(/_/g, ' ')} • {linkedVideo?.variantLabel || 'Generated video'} • {new Date(item.publishAt).toLocaleString()}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Channel: {linkedChannel ? `${linkedChannel.displayName}${linkedChannel.handle ? ` (${linkedChannel.handle})` : ''}` : 'Unassigned'}
                       </div>
                       {item.publishedAt ? (
                         <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">

@@ -62,6 +62,35 @@ export async function api<T>(url: string, init?: ApiRequestInit): Promise<T> {
 }
 
 export const Api = {
+  getChannels: () => api('/api/channels', { showErrorToast: false }),
+  createChannel: (payload: {
+    platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+    displayName: string;
+    handle?: string;
+  }) =>
+    api('/api/channels', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      errorToastTitle: 'Failed to create channel',
+    }),
+  updateChannel: (
+    channelId: string,
+    payload: {
+      status?: 'connected' | 'disconnected';
+      displayName?: string;
+      handle?: string | null;
+    },
+  ) =>
+    api(`/api/channels/${channelId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+      errorToastTitle: 'Failed to update channel',
+    }),
+  deleteChannel: (channelId: string) =>
+    api(`/api/channels/${channelId}`, {
+      method: 'DELETE',
+      errorToastTitle: 'Failed to delete channel',
+    }),
   getSettings: () => api<import('@/shared/types').UserSettingsDTO>('/api/settings', { showErrorToast: false }),
   patchSetting: <K extends keyof import('@/shared/types').UserSettingsDTO>(
     key: K,
@@ -104,6 +133,7 @@ export const Api = {
         id: string;
         videoId: string;
         platform?: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
+        channelId?: string | null;
         title: string;
         description: string;
         publishAt: string;
