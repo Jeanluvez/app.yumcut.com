@@ -6,10 +6,16 @@ import { renderBasicVideoFromAssets } from '@/server/video-renderer';
 import path from 'node:path';
 
 type ClaimedVideoJob = Awaited<ReturnType<typeof claimNextPendingVideoJob>>;
+type SubtitleWord = {
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+};
 type SubtitleEntry = {
   startSeconds: number;
   endSeconds: number;
   text: string;
+  words?: SubtitleWord[];
 };
 type RenderStylePreset = 'balanced' | 'punchy' | 'calm';
 type RenderBehaviorFlags = {
@@ -133,7 +139,7 @@ async function createVoiceoverArtifacts(job: {
   };
 }
 
-function buildSubtitleEntriesFromTimestamps(timestamps: unknown): SubtitleEntry[] {
+function buildSubtitleEntriesFromTimestamps(timestamps: unknown, audioDurationSeconds?: number): SubtitleEntry[] {
   if (!timestamps || typeof timestamps !== 'object') return [];
 
   const raw = timestamps as {
@@ -160,7 +166,7 @@ function buildSubtitleEntriesFromTimestamps(timestamps: unknown): SubtitleEntry[
 
   const entries: SubtitleEntry[] = [];
   let charCursor = 0;
-  let wordBuffer: string[] = [];
+  let wordBuffer: SubtitleWord[] = [];
   let startSeconds: number | null = null;
   let endSeconds = 0;
 
@@ -174,15 +180,23 @@ function buildSubtitleEntriesFromTimestamps(timestamps: unknown): SubtitleEntry[
     const wordEnd = raw.character_end_times_seconds[endIndex];
     if (typeof wordStart !== 'number' || typeof wordEnd !== 'number') continue;
 
+    const sanitizedWord = word.replace(/[^\p{L}\p{N}]+/gu, '').trim();
+    if (!sanitizedWord) continue;
+
     if (startSeconds === null) startSeconds = wordStart;
     endSeconds = wordEnd;
-    wordBuffer.push(word);
+    wordBuffer.push({
+      text: sanitizedWord.toUpperCase(),
+      startSeconds: wordStart,
+      endSeconds: wordEnd,
+    });
 
-    if (wordBuffer.length >= 5) {
+    if (wordBuffer.length >= 2) {
       entries.push({
         startSeconds,
         endSeconds,
-        text: wordBuffer.join(' '),
+        text: wordBuffer.map((item) => item.text).join(' '),
+        words: wordBuffer,
       });
       wordBuffer = [];
       startSeconds = null;
@@ -193,8 +207,23 @@ function buildSubtitleEntriesFromTimestamps(timestamps: unknown): SubtitleEntry[
     entries.push({
       startSeconds,
       endSeconds,
-      text: wordBuffer.join(' '),
+      text: wordBuffer.map((item) => item.text).join(' '),
+      words: wordBuffer,
     });
+  }
+
+  for (let i = 0; i < entries.length - 1; i += 1) {
+    entries[i] = {
+      ...entries[i],
+      endSeconds: Math.min(entries[i].endSeconds, Math.max(entries[i].startSeconds + 0.06, entries[i + 1].startSeconds - 0.02)),
+    };
+  }
+
+  if (entries.length > 0 && typeof audioDurationSeconds === 'number' && Number.isFinite(audioDurationSeconds)) {
+    entries[entries.length - 1] = {
+      ...entries[entries.length - 1],
+      endSeconds: Math.max(entries[entries.length - 1].endSeconds, audioDurationSeconds - 0.02),
+    };
   }
 
   return entries;
@@ -437,9 +466,9 @@ export async function markVideoJobDone(jobId: string) {
   const styleProfile = getRenderStyleProfile(renderOptions.stylePreset);
   const targetRenderDurationSeconds = Math.max(
     2,
-    Math.min(
+    Math.max(
       job.project.durationSeconds,
-      Math.max(2, voiceoverArtifacts.audioDurationMs / 1000 + 0.35),
+      voiceoverArtifacts.audioDurationMs / 1000 + 0.6,
     ),
   );
   const renderedVideo = await renderBasicVideoFromAssets({
@@ -464,7 +493,10 @@ export async function markVideoJobDone(jobId: string) {
     animateImages: renderOptions.animateImages,
     shuffleVideoSlices: renderOptions.shuffleVideoSlices,
     subtitleEntries: renderOptions.captionsEnabled
-      ? buildSubtitleEntriesFromTimestamps(voiceoverArtifacts.timestamps)
+      ? buildSubtitleEntriesFromTimestamps(
+          voiceoverArtifacts.timestamps,
+          voiceoverArtifacts.audioDurationMs / 1000,
+        )
       : [],
   });
   const storagePath = `users/${job.project.userId}/projects/${job.projectId}/outputs/${jobId}-final.mp4`;

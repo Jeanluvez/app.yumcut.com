@@ -39,6 +39,11 @@ type RenderInput = {
     startSeconds: number;
     endSeconds: number;
     text: string;
+    words?: Array<{
+      text: string;
+      startSeconds: number;
+      endSeconds: number;
+    }>;
   }>;
 };
 
@@ -93,7 +98,7 @@ async function prepareSegment(
     `:y='(ih-ih/zoom)/2'`,
     `:d=${totalFrames}:s=${width}x${height}:fps=${imageFrameRate}`,
   ].join('');
-  const videoFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`;
+  const videoFilter = `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=30`;
   const safeDurationSeconds =
     !isImageMimeType(asset.assetMimeType) &&
     (
@@ -108,7 +113,7 @@ async function prepareSegment(
               ? asset.sourceDurationSeconds - asset.sourceStartSeconds - 0.12
               : clipDurationSeconds,
             typeof asset.sourceClipMaxSeconds === 'number'
-              ? Math.max(0.8, asset.sourceClipMaxSeconds - 0.06)
+              ? Math.max(0.8, asset.sourceClipMaxSeconds - 0.16)
               : clipDurationSeconds,
           ),
         )
@@ -135,6 +140,7 @@ async function prepareSegment(
         '-an',
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
+        '-r', '30',
         segmentPath,
       ];
 
@@ -157,6 +163,7 @@ async function prepareSegment(
         '-an',
         '-c:v', 'libx264',
         '-pix_fmt', 'yuv420p',
+        '-r', '30',
         segmentPath,
       ],
       { maxBuffer: 20 * 1024 * 1024 },
@@ -411,7 +418,7 @@ function buildSegmentPlan(
 
   const getMaxRenderableDuration = (asset: RenderAsset) => (
     typeof asset.sourceClipMaxSeconds === 'number'
-      ? Math.max(0.8, asset.sourceClipMaxSeconds - 0.06)
+      ? Math.max(0.8, asset.sourceClipMaxSeconds - 0.16)
       : getPreferredDuration(asset)
   );
 
@@ -486,6 +493,17 @@ function escapeAssText(value: string) {
     .replace(/\n/g, '\\N');
 }
 
+function escapeDrawtextText(value: string) {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/:/g, '\\:')
+    .replace(/'/g, "\\'")
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/,/g, '\\,')
+    .replace(/%/g, '\\%');
+}
+
 function wrapSubtitleText(value: string, maxCharsPerLine = 18, maxLines = 2) {
   const words = value.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return '';
@@ -508,8 +526,11 @@ function wrapSubtitleText(value: string, maxCharsPerLine = 18, maxLines = 2) {
     }
   }
 
-  const consumedWordCount = lines.join(' ').split(/\s+/).filter(Boolean).length;
-  const remainingWords = words.slice(consumedWordCount);
+  const consumedWordCount = lines.reduce((sum, line) => (
+    sum + line.split(/\s+/).filter(Boolean).length
+  ), 0);
+  const currentLineWords = currentLine.split(/\s+/).filter(Boolean);
+  const remainingWords = words.slice(consumedWordCount + currentLineWords.length);
 
   if (lines.length < maxLines && currentLine) {
     const tail = [currentLine, ...remainingWords].join(' ').trim();
@@ -519,6 +540,46 @@ function wrapSubtitleText(value: string, maxCharsPerLine = 18, maxLines = 2) {
   }
 
   return lines.slice(0, maxLines).join('\n');
+}
+
+function wrapSubtitleWords(
+  words: Array<{ text: string; startSeconds: number; endSeconds: number }>,
+  maxCharsPerLine = 12,
+  maxLines = 2,
+) {
+  if (words.length === 0) return [];
+
+  const lines: typeof words[] = [];
+  let currentLine: typeof words = [];
+  let currentLength = 0;
+
+  for (const word of words) {
+    const nextLength = currentLength === 0 ? word.text.length : currentLength + 1 + word.text.length;
+    if (currentLine.length === 0 || nextLength <= maxCharsPerLine) {
+      currentLine.push(word);
+      currentLength = nextLength;
+      continue;
+    }
+
+    lines.push(currentLine);
+    currentLine = [word];
+    currentLength = word.text.length;
+
+    if (lines.length === maxLines - 1) {
+      break;
+    }
+  }
+
+  const consumedCount = lines.reduce((sum, line) => sum + line.length, 0);
+  const remainingWords = words.slice(consumedCount + currentLine.length);
+
+  if (lines.length < maxLines && currentLine.length > 0) {
+    lines.push([...currentLine, ...remainingWords]);
+  } else if (remainingWords.length > 0 && lines.length > 0) {
+    lines[lines.length - 1].push(...remainingWords);
+  }
+
+  return lines.slice(0, maxLines);
 }
 
 function formatAssTime(seconds: number) {
@@ -545,22 +606,295 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,${fontSize},&H00FFFFFF,&H000000FF,&H00111111,&H55000000,1,0,0,0,100,100,0,0,1,2,0,2,48,48,145,1
+Style: Default,Arial,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00101010,&H55000000,1,0,0,0,100,100,0,0,1,2,0,2,48,48,145,1
+Style: Highlight,Arial,${fontSize},&H00FFFFFF,&H00FFFFFF,&H00101010,&H00F020A0,1,0,0,0,100,100,0,0,3,0,0,2,48,48,145,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
-  const body = entries
+  const dialogueLines = entries
     .filter((entry) => entry.text.trim().length > 0 && entry.endSeconds > entry.startSeconds)
-    .map(
-      (entry) =>
-        `Dialogue: 0,${formatAssTime(entry.startSeconds)},${formatAssTime(entry.endSeconds)},Default,,0,0,0,,${escapeAssText(wrapSubtitleText(entry.text.trim()))}`,
-    )
-    .join('\n');
+    .flatMap((entry) => {
+      if (!entry.words || entry.words.length === 0) {
+        return [
+          `Dialogue: 0,${formatAssTime(entry.startSeconds)},${formatAssTime(entry.endSeconds)},Default,,0,0,0,,${escapeAssText(wrapSubtitleText(entry.text.trim().toUpperCase(), 12, 2))}`,
+        ];
+      }
+
+      const wrappedLines = wrapSubtitleWords(entry.words);
+      const flattenedWords = wrappedLines.flat();
+      const baseText = wrappedLines
+        .map((line) => line.map((word) => escapeAssText(word.text)).join(' '))
+        .join('\\N');
+
+      const overlays = flattenedWords.map((activeWord, activeIndex) => {
+        let globalIndex = 0;
+        const overlayText = wrappedLines
+          .map((line) => line.map((word) => {
+            const isActive = globalIndex === activeIndex;
+            globalIndex += 1;
+            const displayText = escapeAssText(word.text);
+            if (isActive) {
+              return `{\\rHighlight}${displayText}{\\rDefault}`;
+            }
+            return `{\\1a&HFF&\\3a&HFF&\\4a&HFF&}${displayText}{\\1a&H00&\\3a&H00&\\4a&H00&}`;
+          }).join(' '))
+          .join('\\N');
+
+        return `Dialogue: 1,${formatAssTime(activeWord.startSeconds)},${formatAssTime(activeWord.endSeconds)},Default,,0,0,0,,${overlayText}`;
+      });
+
+      return [
+        `Dialogue: 0,${formatAssTime(entry.startSeconds)},${formatAssTime(entry.endSeconds)},Default,,0,0,0,,${baseText}`,
+        ...overlays,
+      ];
+    });
+
+  const body = dialogueLines.join('\n');
 
   await writeFile(subtitlePath, `${header}${body}\n`);
   return subtitlePath;
+}
+
+function buildDrawtextSubtitleFilter(
+  entries: NonNullable<RenderInput['subtitleEntries']>,
+  fontSize: number,
+  width: number,
+  height: number,
+) {
+  const fontFile = '/System/Library/Fonts/Supplemental/Arial Bold.ttf';
+  const baseCharWidth = fontSize * 0.62;
+  const lineHeight = Math.round(fontSize * 1.32);
+  const baseY = height - 235;
+  const maxLineWidth = width - 72;
+
+  const lineY = (lineIndex: number, totalLines: number) => {
+    if (totalLines === 1) return baseY;
+    return baseY + lineIndex * lineHeight - Math.round((totalLines - 1) * lineHeight * 0.5);
+  };
+
+  const highlightColor = '0x93128F';
+  const highlightBoxPadding = 12;
+  type Segment = {
+    text: string;
+    highlight?: boolean;
+    x: number;
+    y: number;
+    fontSize: number;
+  };
+  type SubtitleState = {
+    startSeconds: number;
+    endSeconds: number;
+    segments: Segment[];
+  };
+  const states: SubtitleState[] = [];
+
+  const getLineMetrics = (text: string) => {
+    const estimatedWidth = text.length * baseCharWidth;
+    const scale = estimatedWidth > maxLineWidth ? maxLineWidth / estimatedWidth : 1;
+    const lineFontSize = Math.max(28, Math.floor(fontSize * scale));
+    const lineCharWidth = lineFontSize * 0.62;
+    const lineWidth = text.length * lineCharWidth;
+    return {
+      fontSize: lineFontSize,
+      charWidth: lineCharWidth,
+      width: lineWidth,
+    };
+  };
+
+  const buildPlainDrawtext = (
+    text: string,
+    x: number,
+    y: number,
+    segmentFontSize: number,
+    startSeconds: number,
+    endSeconds: number,
+  ) => (
+    `drawtext=fontfile=${fontFile}:text='${escapeDrawtextText(text)}':` +
+    `fontsize=${segmentFontSize}:fontcolor=white:borderw=4:bordercolor=black@0.96:` +
+    `x=${x.toFixed(2)}:y=${y}:` +
+    `enable='between(t,${startSeconds.toFixed(3)},${endSeconds.toFixed(3)})'`
+  );
+
+  const buildHighlightDrawtext = (
+    text: string,
+    x: number,
+    y: number,
+    segmentFontSize: number,
+    startSeconds: number,
+    endSeconds: number,
+  ) => (
+    `drawtext=fontfile=${fontFile}:text='${escapeDrawtextText(text)}':` +
+    `fontsize=${segmentFontSize}:fontcolor=white:borderw=4:bordercolor=black@0.96:` +
+    `box=1:boxcolor=${highlightColor}@1.0:boxborderw=12:` +
+    `x=${x.toFixed(2)}:y=${y}:` +
+    `enable='between(t,${startSeconds.toFixed(3)},${endSeconds.toFixed(3)})'`
+  );
+
+  for (const entry of entries) {
+    if (entry.endSeconds <= entry.startSeconds) continue;
+
+    if (!entry.words || entry.words.length === 0) {
+      const lines = wrapSubtitleText(entry.text.trim().toUpperCase(), 12, 2)
+        .split('\n')
+        .filter(Boolean);
+      const segments: Segment[] = lines.map((text, index) => {
+        const metrics = getLineMetrics(text);
+        return {
+          text,
+          x: (width - metrics.width) / 2,
+          y: lineY(index, lines.length),
+          fontSize: metrics.fontSize,
+        };
+      });
+      states.push({
+        startSeconds: entry.startSeconds,
+        endSeconds: entry.endSeconds,
+        segments,
+      });
+      continue;
+    }
+
+    const wrappedLines = wrapSubtitleWords(entry.words, 12, 2);
+    const lineLayouts = wrappedLines.map((words, index) => {
+      const text = words.map((word) => word.text).join(' ');
+      const metrics = getLineMetrics(text);
+      return {
+        words,
+        text,
+        fontSize: metrics.fontSize,
+        charWidth: metrics.charWidth,
+        x: (width - metrics.width) / 2,
+        y: lineY(index, wrappedLines.length),
+      };
+    });
+
+    const flattenedWords = lineLayouts.flatMap((line, lineIndex) =>
+      line.words.map((word, wordIndex) => ({
+        word,
+        lineIndex,
+        wordIndex,
+      })),
+    );
+
+    flattenedWords.forEach((active, activeIndex) => {
+      const nextActive = flattenedWords[activeIndex + 1];
+      const activeStart = Math.max(entry.startSeconds, active.word.startSeconds + 0.01);
+      const provisionalEnd = Math.min(
+        entry.endSeconds,
+        Math.max(
+          activeStart + 0.04,
+          nextActive
+            ? nextActive.word.startSeconds - 0.02
+            : entry.endSeconds,
+        ),
+      );
+      if (provisionalEnd <= activeStart) return;
+
+      const segments: Segment[] = [];
+      lineLayouts.forEach((line, lineIndex) => {
+        if (lineIndex !== active.lineIndex) {
+          segments.push({
+            text: line.text,
+            x: line.x,
+            y: line.y,
+            fontSize: line.fontSize,
+          });
+          return;
+        }
+
+        const prefixWords = line.words.slice(0, active.wordIndex);
+        const suffixWords = line.words.slice(active.wordIndex + 1);
+        const prefixText = prefixWords.map((item) => item.text).join(' ');
+        const suffixText = suffixWords.map((item) => item.text).join(' ');
+        const prefixWidth = prefixText.length * line.charWidth;
+        const activeWidth = active.word.text.length * line.charWidth;
+        const leadingSpaceWidth = prefixText ? line.charWidth : 0;
+        const trailingSpaceWidth = suffixText ? line.charWidth : 0;
+        const stateLineX = line.x - highlightBoxPadding;
+        const prefixX = stateLineX;
+        const wordX = stateLineX + prefixWidth + leadingSpaceWidth + highlightBoxPadding;
+
+        if (prefixText) {
+          segments.push({
+            text: prefixText,
+            x: prefixX,
+            y: line.y,
+            fontSize: line.fontSize,
+          });
+        }
+
+        segments.push({
+          text: active.word.text,
+          x: wordX,
+          y: line.y,
+          fontSize: line.fontSize,
+          highlight: true,
+        });
+
+        if (suffixText) {
+          const suffixX =
+            stateLineX +
+            prefixWidth +
+            leadingSpaceWidth +
+            highlightBoxPadding * 2 +
+            activeWidth +
+            trailingSpaceWidth;
+          segments.push({
+            text: suffixText,
+            x: suffixX,
+            y: line.y,
+            fontSize: line.fontSize,
+          });
+        }
+      });
+
+      states.push({
+        startSeconds: activeStart,
+        endSeconds: provisionalEnd,
+        segments,
+      });
+    });
+  }
+
+  const normalizedStates = states
+    .sort((a, b) => a.startSeconds - b.startSeconds)
+    .map((state, index, allStates) => {
+      const nextState = allStates[index + 1];
+      const endSeconds = nextState
+        ? Math.min(state.endSeconds, nextState.startSeconds - 0.02)
+        : state.endSeconds;
+      return {
+        ...state,
+        endSeconds,
+      };
+    })
+    .filter((state) => state.endSeconds > state.startSeconds + 0.02);
+
+  const filters = normalizedStates.flatMap((state) =>
+    state.segments.map((segment) => (
+      segment.highlight
+        ? buildHighlightDrawtext(
+            segment.text,
+            segment.x,
+            segment.y,
+            segment.fontSize,
+            state.startSeconds,
+            state.endSeconds,
+          )
+        : buildPlainDrawtext(
+            segment.text,
+            segment.x,
+            segment.y,
+            segment.fontSize,
+            state.startSeconds,
+            state.endSeconds,
+          )
+    )),
+  );
+
+  return filters.join(',');
 }
 
 export async function renderBasicVideoFromAssets(input: RenderInput) {
@@ -593,25 +927,12 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
       imageSegmentSeconds: input.imageSegmentSeconds ?? DEFAULT_IMAGE_SEGMENT_SECONDS,
       videoSegmentSeconds: input.videoSegmentSeconds ?? DEFAULT_VIDEO_SEGMENT_SECONDS,
     });
+    const minimumBufferedVideoSeconds = input.durationSeconds + 2.5;
     const safeSegmentPlan = [...segmentPlan];
-    const repeatableSegments = safeSegmentPlan.filter((segment) => segment.asset.role !== 'hook');
-    let plannedVideoSeconds = safeSegmentPlan.reduce((sum, segment) => sum + segment.durationSeconds, 0);
-    const minimumBufferedVideoSeconds = input.durationSeconds + 1.2;
-
-    if (repeatableSegments.length > 0) {
-      let repeatCursor = 0;
-      while (plannedVideoSeconds < minimumBufferedVideoSeconds && repeatCursor < repeatableSegments.length * 10) {
-        const template = repeatableSegments[repeatCursor % repeatableSegments.length];
-        safeSegmentPlan.push({
-          asset: template.asset,
-          durationSeconds: template.durationSeconds,
-        });
-        plannedVideoSeconds += template.durationSeconds;
-        repeatCursor += 1;
-      }
-    }
+    const repeatableSegments = segmentPlan.filter((segment) => segment.asset.role !== 'hook');
 
     const segmentPaths: string[] = [];
+    let renderedVideoSeconds = 0;
     for (let i = 0; i < safeSegmentPlan.length; i += 1) {
       const segmentPath = await prepareSegment(
         workspace,
@@ -622,6 +943,25 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
         height,
       );
       segmentPaths.push(segmentPath);
+      renderedVideoSeconds += (await probeMediaDurationSeconds(segmentPath)) ?? safeSegmentPlan[i].durationSeconds;
+    }
+
+    if (repeatableSegments.length > 0) {
+      let repeatCursor = 0;
+      while (renderedVideoSeconds < minimumBufferedVideoSeconds && repeatCursor < repeatableSegments.length * 12) {
+        const template = repeatableSegments[repeatCursor % repeatableSegments.length];
+        const segmentPath = await prepareSegment(
+          workspace,
+          template.asset,
+          safeSegmentPlan.length + repeatCursor,
+          template.durationSeconds,
+          width,
+          height,
+        );
+        segmentPaths.push(segmentPath);
+        renderedVideoSeconds += (await probeMediaDurationSeconds(segmentPath)) ?? template.durationSeconds;
+        repeatCursor += 1;
+      }
     }
 
     await writeFile(
@@ -651,17 +991,18 @@ export async function renderBasicVideoFromAssets(input: RenderInput) {
 
     const videoInputPath = input.subtitleEntries && input.subtitleEntries.length > 0
       ? await (async () => {
-          const subtitlePath = await writeSubtitleFile(
-            workspace,
+          const subtitleFilter = buildDrawtextSubtitleFilter(
             input.subtitleEntries,
             input.subtitleFontSize ?? DEFAULT_SUBTITLE_FONT_SIZE,
+            width,
+            height,
           );
           await execFileAsync(
             '/opt/homebrew/bin/ffmpeg',
             [
               '-y',
               '-i', mergedVideoPath,
-              '-vf', `subtitles=${subtitlePath.replace(/:/g, '\\:')}`,
+              '-vf', subtitleFilter,
               '-c:v', 'libx264',
               '-pix_fmt', 'yuv420p',
               subtitledVideoPath,
