@@ -16,8 +16,8 @@ export function AppHeader() {
   const { items, loading } = useProjects();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const hideAccountMenuOnDesktop = pathname === '/';
-  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create/confirm/');
+  const hideAccountMenuOnDesktop = pathname === '/' || pathname?.startsWith('/create');
+  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create');
 
   useEffect(() => {
     function handleProjectSelect() {

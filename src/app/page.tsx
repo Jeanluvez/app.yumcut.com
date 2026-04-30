@@ -1,5 +1,5 @@
-import { CreateVideoTaskShell } from '@/components/create/CreateVideoTaskShell';
+import { HomeShell } from '@/components/home/HomeShell';
 
 export default function Home() {
-  return <CreateVideoTaskShell />;
+  return <HomeShell />;
 }

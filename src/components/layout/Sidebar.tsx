@@ -6,7 +6,7 @@ import { Api } from '@/lib/api-client';
 import { StatusIcon } from '@/components/common/StatusIcon';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { ChevronRight, PanelLeftOpen, PanelLeftClose, FolderOpen, Home, Image as ImageIcon, User, Video } from 'lucide-react';
+import { ChevronRight, PanelLeftOpen, PanelLeftClose, FolderOpen, Home, Image as ImageIcon, Plus, User, Video } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { usePathname } from 'next/navigation';
@@ -23,7 +23,7 @@ const CREATE_SURFACE_NAV_ITEMS = [
     label: 'Home',
     href: '/',
     icon: Home,
-    description: 'Create new project',
+    description: 'Overview and entry point',
     match: (pathname: string | null) => pathname === '/',
   },
   {
@@ -53,7 +53,7 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
   const isAdmin = !!(session?.user as any)?.isAdmin;
   const pathname = usePathname();
   const { settings, update } = useSettings();
-  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create/confirm/');
+  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create');
 
   useEffect(() => {
     setLoading(true);
@@ -162,6 +162,20 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
             </Link>
           </div>
 
+          <div className="border-b border-zinc-800/60 p-2">
+            <Link
+              href="/create"
+              title={open ? undefined : 'Create Task'}
+              className={cn(
+                'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]',
+                !open && 'px-0',
+              )}
+            >
+              <Plus size={16} />
+              {open ? <span>Create Task</span> : null}
+            </Link>
+          </div>
+
           <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
             {CREATE_SURFACE_NAV_ITEMS.map(({ id, label, href, icon: Icon, description, match }) => {
               const active = id === 'projects'
@@ -170,12 +184,12 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
                   ? pathname?.startsWith('/workspace') && hash === '#assets-section'
                   : match(pathname);
               return (
-                <Link
+                <a
                   key={id}
                   href={href}
                   title={open ? undefined : label}
                   className={cn(
-                    'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-150',
+                    'group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-150',
                     active ? 'bg-blue-500/15 text-blue-300' : 'text-zinc-500 hover:bg-zinc-800/60 hover:text-zinc-200',
                     !open && 'justify-center',
                   )}
@@ -198,7 +212,7 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
                     </div>
                   ) : null}
                   {active ? <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-blue-400" /> : null}
-                </Link>
+                </a>
               );
             })}
           </nav>
@@ -233,6 +247,19 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
       )}
     >
       <div className="h-full flex flex-col">
+        <div className="border-b border-gray-200 px-2 py-2 dark:border-gray-800">
+          <Link
+            href="/create"
+            title={open ? undefined : 'Create Task'}
+            className={cn(
+              'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]',
+              !open && 'px-0',
+            )}
+          >
+            <Plus size={16} />
+            {open ? <span>Create Task</span> : null}
+          </Link>
+        </div>
         <div className="flex items-center justify-between px-2 py-2">
           <div className={cn('text-xs', isCreateSurface ? 'text-zinc-500' : 'text-gray-500', !open && 'sr-only')}>{projectsLabel}</div>
           <Button
