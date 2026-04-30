@@ -53,7 +53,10 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
   const isAdmin = !!(session?.user as any)?.isAdmin;
   const pathname = usePathname();
   const { settings, update } = useSettings();
-  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create');
+  const isCreateSurface =
+    pathname === '/' ||
+    pathname?.startsWith('/create') ||
+    pathname?.startsWith('/workspace');
 
   useEffect(() => {
     setLoading(true);

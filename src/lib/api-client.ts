@@ -209,6 +209,14 @@ export const Api = {
     const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
     return api(`/api/assets${qs}`, { showErrorToast: false });
   },
+  getAssetSummary: () =>
+    api<{
+      plan: 'free' | 'pro' | 'business';
+      usedBytes: string;
+      storageLimitBytes: string;
+      remainingBytes: string;
+      assetCount: number;
+    }>('/api/assets/summary', { showErrorToast: false }),
   deleteAsset: (assetId: string) =>
     api<{ ok: boolean; id: string }>('/api/assets', {
       method: 'DELETE',

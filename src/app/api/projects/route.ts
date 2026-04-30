@@ -16,6 +16,9 @@ export const GET = withApiError(async function GET(req: NextRequest) {
       id: true,
       name: true,
       status: true,
+      durationSeconds: true,
+      language: true,
+      aspectRatio: true,
       promoInfo: true,
       createdAt: true,
     },
@@ -26,6 +29,9 @@ export const GET = withApiError(async function GET(req: NextRequest) {
       id: project.id,
       title: project.name,
       status: project.status,
+      durationSeconds: project.durationSeconds,
+      language: project.language,
+      aspectRatio: project.aspectRatio,
       publishQueue:
         project.promoInfo &&
         typeof project.promoInfo === 'object' &&
@@ -115,6 +121,9 @@ export const POST = withApiError(async function POST(req: NextRequest) {
       id: true,
       name: true,
       status: true,
+      durationSeconds: true,
+      language: true,
+      aspectRatio: true,
       createdAt: true,
     },
   });
@@ -124,6 +133,9 @@ export const POST = withApiError(async function POST(req: NextRequest) {
       id: created.id,
       title: created.name,
       status: created.status,
+      durationSeconds: created.durationSeconds,
+      language: created.language,
+      aspectRatio: created.aspectRatio,
       createdAt: created.createdAt.toISOString(),
     },
     { status: 201 },

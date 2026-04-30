@@ -45,6 +45,7 @@ export const GET = withApiError(async function GET(req: NextRequest) {
   });
 
   const projectIds = Array.from(new Set(items.map((item) => item.projectId).filter((id): id is string => !!id)));
+  const assetIds = items.map((item) => item.id);
   const projects = projectIds.length > 0
     ? await prisma.project.findMany({
         where: {
@@ -57,7 +58,33 @@ export const GET = withApiError(async function GET(req: NextRequest) {
         },
       })
     : [];
+  const usageProjects = assetIds.length > 0
+    ? await prisma.project.findMany({
+        where: {
+          userId: auth.userId,
+          OR: [
+            { selectedAssetIds: { hasSome: assetIds } },
+            { hookAssetId: { in: assetIds } },
+          ],
+        },
+        select: {
+          selectedAssetIds: true,
+          hookAssetId: true,
+        },
+      })
+    : [];
   const projectById = new Map(projects.map((project) => [project.id, project] as const));
+  const usageCountByAssetId = new Map<string, number>();
+
+  for (const project of usageProjects) {
+    for (const assetId of project.selectedAssetIds) {
+      usageCountByAssetId.set(assetId, (usageCountByAssetId.get(assetId) ?? 0) + 1);
+    }
+
+    if (project.hookAssetId) {
+      usageCountByAssetId.set(project.hookAssetId, (usageCountByAssetId.get(project.hookAssetId) ?? 0) + 1);
+    }
+  }
 
   return ok(items.map((item) => ({
     id: item.id,
@@ -73,6 +100,7 @@ export const GET = withApiError(async function GET(req: NextRequest) {
     height: item.height,
     expiresAt: item.expiresAt.toISOString(),
     createdAt: item.createdAt.toISOString(),
+    usageCount: usageCountByAssetId.get(item.id) ?? 0,
     project: item.projectId
       ? (() => {
           const project = projectById.get(item.projectId);
