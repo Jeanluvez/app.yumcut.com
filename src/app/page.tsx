@@ -1,7 +1,5 @@
-import { PromptInput } from '@/components/main/PromptInput';
+import { CreateVideoTaskShell } from '@/components/create/CreateVideoTaskShell';
 
 export default function Home() {
-  return (
-    <PromptInput />
-  );
+  return <CreateVideoTaskShell />;
 }

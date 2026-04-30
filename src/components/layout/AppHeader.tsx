@@ -17,6 +17,7 @@ export function AppHeader() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const hideAccountMenuOnDesktop = pathname === '/';
+  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create/confirm/');
 
   useEffect(() => {
     function handleProjectSelect() {
@@ -28,7 +29,14 @@ export function AppHeader() {
     }
   }, []);
   return (
-    <header className="w-full border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
+    <header
+      className={cn(
+        'w-full px-4 py-3 flex items-center justify-between',
+        isCreateSurface
+          ? 'border-b border-zinc-800/60 bg-zinc-950/90 text-zinc-100 backdrop-blur-md'
+          : 'border-b border-gray-200 dark:border-gray-800',
+      )}
+    >
       <div className="flex items-center gap-2">
         {/* Mobile projects access */}
         <Popover open={open} onOpenChange={setOpen}>
@@ -59,7 +67,7 @@ export function AppHeader() {
             </ScrollArea>
           </PopoverContent>
         </Popover>
-        <Link href="/" className="font-semibold tracking-tight">
+        <Link href="/" className={cn('font-semibold tracking-tight', isCreateSurface ? 'text-zinc-100' : '')}>
           {APP_NAME}
         </Link>
       </div>

@@ -1,6 +1,6 @@
-import { ProjectConfirmation } from '@/components/create/ProjectConfirmation';
+import { CreateConfirmationShell } from '@/components/create/CreateConfirmationShell';
 
 export default async function ConfirmCreatePage({ params }: { params: Promise<{ draftId: string }> }) {
   const { draftId } = await params;
-  return <ProjectConfirmation draftId={draftId} />;
+  return <CreateConfirmationShell draftId={draftId} />;
 }

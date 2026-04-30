@@ -154,6 +154,7 @@ export function WorkspaceShell() {
   const [channels, setChannels] = useState<ChannelItem[]>([]);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [creatingChannel, setCreatingChannel] = useState(false);
+  const [startingTikTokOAuth, setStartingTikTokOAuth] = useState(false);
   const [updatingChannelId, setUpdatingChannelId] = useState<string | null>(null);
   const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
   const [channelForm, setChannelForm] = useState({
@@ -270,6 +271,27 @@ export function WorkspaceShell() {
     loadChannels();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const channelOauth = url.searchParams.get('channelOauth');
+    const platform = url.searchParams.get('platform');
+    const message = url.searchParams.get('message');
+    if (platform !== 'tiktok' || !channelOauth) return;
+
+    if (channelOauth === 'success') {
+      toast.success('TikTok channel connected');
+      void loadChannels();
+    } else if (channelOauth === 'error') {
+      toast.error(message || 'TikTok connection failed');
+    }
+
+    url.searchParams.delete('channelOauth');
+    url.searchParams.delete('platform');
+    url.searchParams.delete('message');
+    window.history.replaceState({}, '', url.toString());
+  }, []);
+
   async function handleDeleteVideo(videoId: string) {
     setDeletingVideoId(videoId);
     try {
@@ -314,6 +336,21 @@ export function WorkspaceShell() {
       toast.error(err?.error?.message || 'Could not create channel. Please try again.');
     } finally {
       setCreatingChannel(false);
+    }
+  }
+
+  async function handleConnectTikTok() {
+    setStartingTikTokOAuth(true);
+    try {
+      const result = await Api.startTikTokChannelOAuth();
+      const authUrl = (result as { authUrl?: string }).authUrl;
+      if (!authUrl) {
+        throw new Error('TikTok OAuth URL is missing.');
+      }
+      window.location.assign(authUrl);
+    } catch (err: any) {
+      toast.error(err?.error?.message || err?.message || 'Could not start TikTok connection.');
+      setStartingTikTokOAuth(false);
     }
   }
 
@@ -561,6 +598,11 @@ export function WorkspaceShell() {
               <CardDescription>{channelsLoading ? 'Loading channels...' : channelCountLabel}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex justify-end">
+                <Button type="button" onClick={() => void handleConnectTikTok()} disabled={startingTikTokOAuth}>
+                  {startingTikTokOAuth ? 'Redirecting...' : 'Connect TikTok'}
+                </Button>
+              </div>
               <form className="grid gap-4 rounded-lg border border-dashed border-gray-200 p-4 dark:border-gray-800" onSubmit={handleCreateChannel}>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="grid gap-2">
@@ -660,7 +702,7 @@ export function WorkspaceShell() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="videos-section">
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>My Videos</CardTitle>
               <CardDescription>{videosLoading ? 'Loading videos...' : videoCountLabel}</CardDescription>
@@ -713,7 +755,7 @@ export function WorkspaceShell() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card id="assets-section">
             <CardHeader className="flex-col items-start gap-3">
               <div>
                 <CardTitle>My Assets</CardTitle>
@@ -860,6 +902,11 @@ export function WorkspaceShell() {
                               >
                                 Open post
                               </a>
+                            </div>
+                          ) : null}
+                          {item.platform === 'tiktok' && item.status === 'published' && !item.publishedUrl ? (
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Uploaded to TikTok inbox. Open TikTok to finish editing and posting.
                             </div>
                           ) : null}
                           {item.description ? (

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -121,8 +122,10 @@ export function LanguageDropdown({
   autoVoices,
   voiceModalOpen = false,
 }: Props) {
+  const pathname = usePathname();
   const { language } = useAppLanguage();
   const copy = COPY[language];
+  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create/confirm/');
   const getUiLanguageLabel = useCallback(
     (code: TargetLanguageCode) => LANGUAGE_LABELS_BY_UI[language][code] || getLanguageLabel(code),
     [language],
@@ -203,7 +206,9 @@ export function LanguageDropdown({
           title={copy.targetLanguagesTitle}
           className={cn(
             'relative rounded-full h-8 px-3 text-sm font-normal',
+            isCreateSurface && 'border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100',
             isMultilingual ? 'border-blue-200 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40' : '',
+            isCreateSurface && isMultilingual ? 'border-blue-500/30 bg-blue-500/10 text-blue-200 hover:bg-blue-500/15' : '',
           )}
         >
           <div className="flex items-center gap-1">

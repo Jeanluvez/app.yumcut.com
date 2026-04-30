@@ -5,7 +5,7 @@ import { LanguageDropdown } from './LanguageDropdown';
 import { SettingsPopover } from './SettingsPopover';
 import { CharacterModal, type CharacterSelection } from './CharacterModal';
 import { VoicePickerDialog } from './VoicePickerDialog';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -87,6 +87,8 @@ type PromptInputCopy = {
   heading: string;
   subtitle: string;
   placeholder: string;
+  createSurfaceHeading: string;
+  createSurfaceSubtitle: string;
   verticalFormat: string;
   settings: string;
   chooseCharacter: string;
@@ -128,6 +130,8 @@ const PROMPT_INPUT_COPY: Record<AppLanguageCode, PromptInputCopy> = {
     heading: 'What video to make?',
     subtitle: "Describe your concept or paste your text script. We'll create the whole video.",
     placeholder: 'Describe your idea…',
+    createSurfaceHeading: 'Create the first short video task',
+    createSurfaceSubtitle: 'Describe the ad concept, product angle, or exact script you want Sprokl to turn into a short video task.',
     verticalFormat: 'Vertical 9:16 format',
     settings: 'Settings',
     chooseCharacter: 'Choose character',
@@ -170,6 +174,8 @@ const PROMPT_INPUT_COPY: Record<AppLanguageCode, PromptInputCopy> = {
     heading: 'Какое видео создать?',
     subtitle: 'Опишите идею или вставьте готовый текст сценария. ЯмКат соберет ролик целиком.',
     placeholder: 'Опишите вашу идею…',
+    createSurfaceHeading: 'Создайте первую задачу на короткое видео',
+    createSurfaceSubtitle: 'Опишите рекламную идею, товарный угол или вставьте точный сценарий, который Sprokl превратит в задачу на короткое видео.',
     verticalFormat: 'Вертикальный формат 9:16',
     settings: 'Настройки',
     chooseCharacter: 'Выбрать персонажа',
@@ -214,6 +220,7 @@ export function PromptInput() {
   const { status: authStatus } = useSession();
   const { language } = useAppLanguage();
   const copy = PROMPT_INPUT_COPY[language];
+  const pathname = usePathname();
   const { settings, update } = useSettings();
   const { defaultVoiceId, getByExternalId, autoVoices } = useVoices();
   const [text, setText] = useState('');
@@ -438,6 +445,10 @@ export function PromptInput() {
         ? 'monthly'
         : null;
   const monthlyLimitReached = activePlanKey === 'monthly';
+  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create/confirm/');
+  const heading = isCreateSurface ? copy.createSurfaceHeading : copy.heading;
+  const subtitle = isCreateSurface ? copy.createSurfaceSubtitle : copy.subtitle;
+  const inputPlaceholder = placeholder || copy.placeholder;
 
   const openSubscriptionCheckout = useCallback(async (plan: 'weekly' | 'monthly') => {
     setCheckoutPlan(plan);
@@ -644,14 +655,38 @@ export function PromptInput() {
     <div className="mx-auto w-full max-w-3xl px-2 sm:px-0">
       <div className="p-0">
         <div className="mb-3">
-          <h1 className="text-pretty text-center font-semibold tracking-tighter text-gray-900 dark:text-gray-100 sm:text-[32px] md:text-[46px] text-[29px]">{copy.heading}</h1>
-          <p className="mt-1 mb-6 text-center text-[clamp(12px,3.5vw,20px)] sm:text-[20px] text-gray-600 dark:text-gray-300 whitespace-normal text-pretty leading-tight tracking-tight">{copy.subtitle}</p>
+          <h1
+            className={[
+              'text-pretty text-center font-semibold tracking-tighter sm:text-[32px] md:text-[46px] text-[29px]',
+              isCreateSurface ? 'text-zinc-100' : 'text-gray-900 dark:text-gray-100',
+            ].join(' ')}
+          >
+            {heading}
+          </h1>
+          <p
+            className={[
+              'mt-1 mb-6 text-center text-[clamp(12px,3.5vw,20px)] sm:text-[20px] whitespace-normal text-pretty leading-tight tracking-tight',
+              isCreateSurface ? 'text-zinc-400' : 'text-gray-600 dark:text-gray-300',
+            ].join(' ')}
+          >
+            {subtitle}
+          </p>
         </div>
         {/* Unified input container: textarea on top, control bar at bottom; same visual block */}
-        <div className="mt-2 rounded-lg border border-gray-200 dark:border-gray-800">
+        <div
+          className={[
+            'mt-2 rounded-[26px] border overflow-hidden',
+            isCreateSurface
+              ? 'border-zinc-800/80 bg-zinc-950/80 shadow-[0_24px_80px_rgba(15,23,42,0.38)]'
+              : 'border-gray-200 dark:border-gray-800',
+          ].join(' ')}
+        >
           <Textarea
-            className="min-h-[140px] sm:min-h-[180px] w-full resize-none border-0 bg-transparent p-4 pr-4 text-sm leading-relaxed focus-visible:ring-0 focus-visible:outline-none"
-            placeholder={placeholder || copy.placeholder}
+            className={[
+              'min-h-[160px] sm:min-h-[220px] w-full resize-none border-0 p-5 sm:p-6 pr-4 text-sm leading-relaxed focus-visible:ring-0 focus-visible:outline-none',
+              isCreateSurface ? 'bg-transparent text-zinc-100 placeholder:text-zinc-600' : 'bg-transparent',
+            ].join(' ')}
+            placeholder={inputPlaceholder}
             disabled={projectCreationDisabled}
             value={text}
             onChange={(e) => {
@@ -677,11 +712,16 @@ export function PromptInput() {
             </div>
           ) : null}
           {projectStateValidation.fieldErrors.text ? (
-            <div className="mt-2 px-4 pb-1 text-sm text-rose-700 dark:text-rose-200">
+            <div className="mt-2 px-4 pb-1 text-sm text-rose-400">
               {projectStateValidation.fieldErrors.text}
             </div>
           ) : null}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 px-2 sm:px-3 py-2">
+          <div
+            className={[
+              'flex flex-col gap-3 px-3 sm:px-4 py-3',
+              isCreateSurface ? 'border-t border-zinc-800/80 bg-zinc-900/70' : '',
+            ].join(' ')}
+          >
             <div className="flex flex-wrap items-center gap-2">
               {/* Vertical format indicator (9:16), left-most */}
               <Tooltip content={copy.verticalFormat}>
@@ -689,7 +729,9 @@ export function PromptInput() {
                   type="button"
                   variant="outline"
                   size="icon"
-                  className="h-8 w-8 rounded-full border-blue-200 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40"
+                  className={isCreateSurface
+                    ? 'h-8 w-8 rounded-full border-blue-500/30 bg-blue-500/10 text-blue-200 hover:bg-blue-500/15'
+                    : 'h-8 w-8 rounded-full border-blue-200 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40'}
                   aria-label={copy.verticalFormat}
                   aria-pressed="true"
                   aria-disabled="true"
@@ -730,7 +772,9 @@ export function PromptInput() {
                       type="button"
                       size="icon"
                       variant="ghost"
-                      className="relative rounded-full p-0 inline-grid place-items-center leading-none"
+                      className={isCreateSurface
+                        ? 'relative rounded-full p-0 inline-grid place-items-center leading-none text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100'
+                        : 'relative rounded-full p-0 inline-grid place-items-center leading-none'}
                       aria-label={copy.settings}
                     >
                       <Settings className="h-4 w-4" />
@@ -773,7 +817,9 @@ export function PromptInput() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="relative rounded-full"
+                  className={isCreateSurface
+                    ? 'relative rounded-full border-zinc-700 bg-zinc-950/90 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
+                    : 'relative rounded-full'}
                   onClick={() => setCharOpen(true)}
                   disabled={projectStateValidation.disabled.characters}
                 >
@@ -790,9 +836,13 @@ export function PromptInput() {
                   variant="outline"
                   size="sm"
                   className={
-                    'rounded-full pl-2 pr-3 ' +
+                    (isCreateSurface
+                      ? 'rounded-full pl-2 pr-3 border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100 '
+                      : 'rounded-full pl-2 pr-3 ') +
                     (useExact
-                      ? 'border-blue-200 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40'
+                      ? (isCreateSurface
+                          ? 'border-blue-500/30 text-blue-200 bg-blue-500/10 hover:bg-blue-500/15'
+                          : 'border-blue-200 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40')
                       : '')
                   }
                   disabled={savingUseExact}
@@ -821,27 +871,34 @@ export function PromptInput() {
                 </Button>
               </Tooltip>
             </div>
-            <Button
-              type="button"
-              className="w-full sm:w-9 sm:h-9 sm:px-0 sm:rounded-full"
-              onClick={submit}
-              disabled={
-                !text.trim() ||
-                submitting ||
-                projectStateValidation.disabled.submit ||
-                projectCreationDisabled ||
-                (!isEnglish && !tokensLoading && !hasTokensForCurrent)
-              }
-              aria-label={copy.createProject}
-              title={copy.createProject}
-            >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Wand2 className="h-4 w-4" />
-              )}
-              <span className="ml-2 sm:hidden">{copy.create}</span>
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className={isCreateSurface ? 'text-xs text-zinc-500' : 'text-xs text-gray-500 dark:text-gray-400'}>
+                {useExact ? copy.modeScriptTooltip : copy.modeIdeaTooltip}
+              </div>
+              <Button
+                type="button"
+                className={isCreateSurface
+                  ? 'h-11 w-full rounded-2xl px-5 gradient-primary text-white shadow-lg shadow-indigo-950/40 hover:opacity-95 sm:w-auto sm:min-w-[190px]'
+                  : 'w-full sm:w-9 sm:h-9 sm:px-0 sm:rounded-full'}
+                onClick={submit}
+                disabled={
+                  !text.trim() ||
+                  submitting ||
+                  projectStateValidation.disabled.submit ||
+                  projectCreationDisabled ||
+                  (!isEnglish && !tokensLoading && !hasTokensForCurrent)
+                }
+                aria-label={copy.createProject}
+                title={copy.createProject}
+              >
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4" />
+                )}
+                <span className="ml-2">{copy.createProject}</span>
+              </Button>
+            </div>
           </div>
         </div>
         <div className="mt-3 flex items-center gap-3 flex-wrap">

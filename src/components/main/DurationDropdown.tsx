@@ -3,8 +3,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip } from '@/components/common/Tooltip';
 import { Button } from '@/components/ui/button';
 import { Clock } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
 import type { AppLanguageCode } from '@/shared/constants/app-language';
+import { cn } from '@/lib/utils';
 
 type Props = {
   value: number;
@@ -56,8 +58,10 @@ export function DurationDropdown({
   disabled,
   tooltipWhenDisabled,
 }: Props) {
+  const pathname = usePathname();
   const { language } = useAppLanguage();
   const copy = COPY[language];
+  const isCreateSurface = pathname === '/' || pathname?.startsWith('/create/confirm/');
   const tooltip = disabled
     ? (tooltipWhenDisabled || copy.exactScriptDurationNa)
     : copy.approximateDuration;
@@ -71,7 +75,7 @@ export function DurationDropdown({
           type="button"
           variant="outline"
           size="sm"
-          className="h-8 rounded-full px-3"
+          className={cn('h-8 rounded-full px-3', isCreateSurface && 'border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100')}
           disabled={disabled}
           aria-label={copy.videoDuration}
         >
@@ -85,7 +89,7 @@ export function DurationDropdown({
   return (
     <Select value={String(selectedValue)} onValueChange={(v) => onChange(parseInt(v, 10))}>
       <Tooltip content={tooltip}>
-        <SelectTrigger className="w-[96px] h-8 text-sm" disabled={disabled}>
+        <SelectTrigger className={cn('w-[96px] h-8 text-sm', isCreateSurface && 'border-zinc-700 bg-zinc-950 text-zinc-200 hover:bg-zinc-800')} disabled={disabled}>
           <div className="flex items-center gap-1">
             {disabled ? (
               <span className="text-gray-500">{copy.na}</span>
