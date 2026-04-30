@@ -29,9 +29,9 @@ const CREATE_SURFACE_NAV_ITEMS = [
   {
     id: 'projects',
     label: 'Projects',
-    href: '/workspace#videos-section',
+    href: '/workspace#projects-section',
     icon: Video,
-    description: 'Generated videos',
+    description: 'Project queue',
     match: (pathname: string | null) => pathname?.startsWith('/workspace') ?? false,
   },
   {

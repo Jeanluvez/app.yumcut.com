@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Check,
   Clock3,
   Clapperboard,
+  Edit3,
   FileText,
   FolderOpen,
   Globe2,
@@ -14,6 +16,8 @@ import {
   Loader2,
   Monitor,
   PlayCircle,
+  RefreshCw,
+  RotateCcw,
   Square,
   SlidersHorizontal,
   Smartphone,
@@ -23,6 +27,7 @@ import {
   Mic,
 } from 'lucide-react';
 import { Api } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 type StepId = 1 | 2 | 3 | 4 | 5;
 
@@ -69,6 +74,17 @@ type SettingsDraft = {
   music: 'upbeat-trending' | 'chill-lofi' | 'dramatic-cinematic' | 'none';
 };
 
+type ScriptStyle = 'Storytelling' | 'Problem-Solution' | 'FOMO';
+
+type ScriptDraft = {
+  id: string;
+  style: ScriptStyle;
+  hook: string;
+  body: string;
+  cta: string;
+  edited?: boolean;
+};
+
 const STEPS = [
   {
     id: 1 as StepId,
@@ -96,8 +112,8 @@ const STEPS = [
   },
   {
     id: 5 as StepId,
-    label: 'Render',
-    description: 'Review the task and create the project.',
+    label: 'Review & Create',
+    description: 'Review the task and continue to project creation.',
     icon: Clapperboard,
   },
 ] as const;
@@ -131,6 +147,55 @@ const MUSIC_OPTIONS = [
   { value: 'dramatic-cinematic' as const, label: 'Dramatic Cinematic', desc: 'Emotional and punchy' },
   { value: 'none' as const, label: 'No Music', desc: 'Voiceover only' },
 ] as const;
+
+const SCRIPT_STYLE_STYLES: Record<ScriptStyle, string> = {
+  Storytelling: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
+  'Problem-Solution': 'border-blue-500/30 bg-blue-500/10 text-blue-200',
+  FOMO: 'border-pink-500/30 bg-pink-500/10 text-pink-200',
+};
+
+function generateMockScripts(productName: string): ScriptDraft[] {
+  const name = productName.trim() || 'your product';
+
+  return [
+    {
+      id: 'storytelling',
+      style: 'Storytelling',
+      hook: `I stopped scrolling the second I saw what ${name} did in just a few days.`,
+      body: `${name} is built for short-form ads because the product payoff is easy to show fast. Start with the problem, show the before-and-after moment, then land on the strongest product proof in under ten seconds.`,
+      cta: 'Tap to see the product details and current offer.',
+    },
+    {
+      id: 'problem-solution',
+      style: 'Problem-Solution',
+      hook: `Still dealing with the same product problem every week? Here's the fix.`,
+      body: `Frame the pain point first, then explain how ${name} changes the outcome. Keep the demo visual, a single proof point, and a clear reason why this beats the usual alternatives.`,
+      cta: 'Open the product page to see how it works.',
+    },
+    {
+      id: 'fomo',
+      style: 'FOMO',
+      hook: `This is the product everyone keeps saving before it sells out again.`,
+      body: `Use urgency, social proof, and a quick result clip. ${name} works best in this format when the edit feels fast, direct, and highly visual from the first second.`,
+      cta: 'Check availability before the current batch is gone.',
+    },
+  ];
+}
+
+function buildDraftText(productBrief: ProductBriefDraft, scripts: ScriptDraft[], selectedIds: string[]) {
+  const selectedScripts = scripts.filter((item) => selectedIds.includes(item.id));
+  const scriptStyles = selectedScripts.map((item) => item.style).join(', ');
+  const sections = [
+    productBrief.productName ? `Product: ${productBrief.productName}` : null,
+    productBrief.productDescription ? `Description: ${productBrief.productDescription}` : null,
+    productBrief.sellingPoints ? `Selling points: ${productBrief.sellingPoints}` : null,
+    productBrief.targetAudience ? `Audience: ${productBrief.targetAudience}` : null,
+    productBrief.productUrl ? `Product URL: ${productBrief.productUrl}` : null,
+    scriptStyles ? `Preferred script styles: ${scriptStyles}` : null,
+  ].filter(Boolean);
+
+  return sections.join('\n');
+}
 
 function formatBytes(value: string) {
   const bytes = Number(value);
@@ -240,10 +305,17 @@ function StepPanel({
   );
 }
 
-function MediaStep({ onNext }: { onNext: () => void }) {
+function MediaStep({
+  selectedIds,
+  onChangeSelectedIds,
+  onNext,
+}: {
+  selectedIds: string[];
+  onChangeSelectedIds: (next: string[]) => void;
+  onNext: () => void;
+}) {
   const [activeTab, setActiveTab] = useState<'library' | 'upload'>('library');
   const [assets, setAssets] = useState<AssetItem[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [localUploads, setLocalUploads] = useState<LocalUploadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -280,7 +352,7 @@ function MediaStep({ onNext }: { onNext: () => void }) {
   const hookAssets = assets.filter((item) => item.type === 'hook').slice(0, 3);
 
   function toggleAsset(id: string) {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+    onChangeSelectedIds(selectedIds.includes(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id]);
   }
 
   function handleLocalFiles(files: FileList | null) {
@@ -790,27 +862,265 @@ function SettingsStep({
   );
 }
 
-function ScriptsStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+function ScriptsStep({
+  productName,
+  scripts,
+  selectedIds,
+  onChangeScripts,
+  onChangeSelectedIds,
+  onBack,
+  onNext,
+}: {
+  productName: string;
+  scripts: ScriptDraft[];
+  selectedIds: string[];
+  onChangeScripts: (next: ScriptDraft[]) => void;
+  onChangeSelectedIds: (next: string[]) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<ScriptDraft>>({});
+
+  useEffect(() => {
+    if (scripts.length > 0) return;
+
+    setIsGenerating(true);
+    const timer = window.setTimeout(() => {
+      const generated = generateMockScripts(productName);
+      onChangeScripts(generated);
+      onChangeSelectedIds(generated.map((item) => item.id));
+      setIsGenerating(false);
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [productName, scripts.length, onChangeScripts, onChangeSelectedIds]);
+
+  function handleRegenerate() {
+    setEditingId(null);
+    setIsGenerating(true);
+    window.setTimeout(() => {
+      const generated = generateMockScripts(productName);
+      onChangeScripts(generated);
+      onChangeSelectedIds(generated.map((item) => item.id));
+      setIsGenerating(false);
+    }, 900);
+  }
+
+  function toggleSelected(id: string) {
+    onChangeSelectedIds(
+      selectedIds.includes(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id],
+    );
+  }
+
+  function startEditing(script: ScriptDraft) {
+    setEditingId(script.id);
+    setEditDraft({ hook: script.hook, body: script.body, cta: script.cta });
+  }
+
+  function saveEdit(id: string) {
+    onChangeScripts(
+      scripts.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              hook: editDraft.hook ?? item.hook,
+              body: editDraft.body ?? item.body,
+              cta: editDraft.cta ?? item.cta,
+              edited: true,
+            }
+          : item,
+      ),
+    );
+    setEditingId(null);
+  }
+
+  function resetScript(id: string) {
+    const replacement = generateMockScripts(productName).find((item) => item.id === id);
+    if (!replacement) return;
+    onChangeScripts(scripts.map((item) => (item.id === id ? replacement : item)));
+    setEditingId(null);
+  }
+
   return (
     <StepPanel
       eyebrow="Step 04"
-      title="Prepare script generation"
-      description="Script generation still runs through the current create-project path. This step now has its own editing surface instead of duplicating labels inside the brief area."
+      title="Review and refine generated scripts"
+      description="This step now follows the script-card workflow from your frontend reference. It supports multiple script variants, selection for rendering, and inline editing before the final step."
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Idea mode</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
-            Start from a product angle or campaign concept and let Sprokl expand it into a script.
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-white">Generated variants</p>
+          <p className="mt-1 text-sm leading-6 text-zinc-400">
+            Choose which scripts should move forward into rendering. Edit any variant inline before continuing.
           </p>
         </div>
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Script mode</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
-            Paste an exact script when you already know the lines and want the video generated from that copy.
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={handleRegenerate}
+          disabled={isGenerating}
+          className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:opacity-50"
+        >
+          <span className="inline-flex items-center gap-2">
+            {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Regenerate
+          </span>
+        </button>
       </div>
+
+      {isGenerating ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 animate-pulse">
+              <div className="h-5 w-32 rounded bg-zinc-800" />
+              <div className="mt-4 h-4 rounded bg-zinc-800" />
+              <div className="mt-2 h-4 w-5/6 rounded bg-zinc-800" />
+              <div className="mt-2 h-4 w-3/4 rounded bg-zinc-800" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {!isGenerating ? (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-zinc-500">
+              <span className="font-semibold text-zinc-200">{selectedIds.length}</span> of {scripts.length} scripts selected
+            </p>
+            <button
+              type="button"
+              onClick={() =>
+                onChangeSelectedIds(selectedIds.length === scripts.length ? [] : scripts.map((item) => item.id))
+              }
+              className="text-xs font-medium text-blue-200 transition hover:text-blue-100"
+            >
+              {selectedIds.length === scripts.length ? 'Deselect all' : 'Select all'}
+            </button>
+          </div>
+
+          {scripts.map((script) => {
+            const isSelected = selectedIds.includes(script.id);
+            const isEditing = editingId === script.id;
+
+            return (
+              <div
+                key={script.id}
+                className={`rounded-3xl border bg-zinc-900/80 transition ${
+                  isSelected ? 'border-blue-400/40 ring-1 ring-blue-400/20' : 'border-zinc-800'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleSelected(script.id)}
+                      className={`flex h-5 w-5 items-center justify-center rounded-md border-2 transition ${
+                        isSelected ? 'border-blue-400 bg-blue-500' : 'border-zinc-600 hover:border-zinc-500'
+                      }`}
+                    >
+                      {isSelected ? <Check className="h-3 w-3 text-white" /> : null}
+                    </button>
+                    <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${SCRIPT_STYLE_STYLES[script.style]}`}>
+                      {script.style}
+                    </span>
+                    {script.edited ? (
+                      <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-300">
+                        Edited
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {script.edited ? (
+                      <button
+                        type="button"
+                        onClick={() => resetScript(script.id)}
+                        className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    {!isEditing ? (
+                      <button
+                        type="button"
+                        onClick={() => startEditing(script)}
+                        className="rounded-lg p-2 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="space-y-4 px-5 py-5">
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Hook</p>
+                    {isEditing ? (
+                      <textarea
+                        rows={2}
+                        value={editDraft.hook ?? ''}
+                        onChange={(event) => setEditDraft((prev) => ({ ...prev, hook: event.target.value }))}
+                        className="w-full rounded-2xl border border-zinc-700 bg-zinc-950/70 px-4 py-3 text-sm text-zinc-100 outline-none transition focus:border-blue-400/40"
+                      />
+                    ) : (
+                      <p className="text-sm font-medium leading-6 text-zinc-100">{script.hook}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Body</p>
+                    {isEditing ? (
+                      <textarea
+                        rows={4}
+                        value={editDraft.body ?? ''}
+                        onChange={(event) => setEditDraft((prev) => ({ ...prev, body: event.target.value }))}
+                        className="w-full rounded-2xl border border-zinc-700 bg-zinc-950/70 px-4 py-3 text-sm text-zinc-100 outline-none transition focus:border-blue-400/40"
+                      />
+                    ) : (
+                      <p className="whitespace-pre-line text-sm leading-6 text-zinc-400">{script.body}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">CTA</p>
+                    {isEditing ? (
+                      <textarea
+                        rows={2}
+                        value={editDraft.cta ?? ''}
+                        onChange={(event) => setEditDraft((prev) => ({ ...prev, cta: event.target.value }))}
+                        className="w-full rounded-2xl border border-zinc-700 bg-zinc-950/70 px-4 py-3 text-sm text-zinc-100 outline-none transition focus:border-blue-400/40"
+                      />
+                    ) : (
+                      <p className="text-sm leading-6 text-zinc-300">{script.cta}</p>
+                    )}
+                  </div>
+
+                  {isEditing ? (
+                    <div className="flex flex-wrap items-center gap-3 border-t border-zinc-800 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => saveEdit(script.id)}
+                        className="rounded-xl gradient-primary px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                      >
+                        Save changes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(null)}
+                        className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -831,26 +1141,62 @@ function ScriptsStep({ onBack, onNext }: { onBack: () => void; onNext: () => voi
   );
 }
 
-function RenderStep({ onBack, onGoBrief }: { onBack: () => void; onGoBrief: () => void }) {
+function RenderStep({
+  productBrief,
+  settings,
+  scripts,
+  selectedIds,
+  submitting,
+  onCreate,
+  onBack,
+}: {
+  productBrief: ProductBriefDraft;
+  settings: SettingsDraft;
+  scripts: ScriptDraft[];
+  selectedIds: string[];
+  submitting: boolean;
+  onCreate: () => void;
+  onBack: () => void;
+}) {
+  const selectedScripts = scripts.filter((item) => selectedIds.includes(item.id));
+
   return (
     <StepPanel
       eyebrow="Step 05"
-      title="Review and create the project"
-      description="The current backend still reviews the final task on the confirmation page after creation. This stage keeps that path, but now the wizard flow above clearly leads here."
+      title="Review the task before project creation"
+      description="This step now acts as a lightweight review and submit stage. It summarizes the homepage wizard state, then hands off to the existing confirmation flow without changing the backend pipeline."
     >
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Draft</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">Your brief is stored locally before the confirmation step.</p>
+          <p className="text-sm font-semibold text-white">Brief</p>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            {productBrief.productName || 'Unnamed product'}
+            <br />
+            <span className="text-zinc-500">{productBrief.targetAudience || 'No audience added yet'}</span>
+          </p>
         </div>
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Review</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">You confirm voices, languages, and script mode using the existing flow.</p>
+          <p className="text-sm font-semibold text-white">Settings</p>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            {settings.aspectRatio} • {settings.duration}s • {settings.language.toUpperCase()}
+            <br />
+            <span className="text-zinc-500">{settings.voice} / {settings.music}</span>
+          </p>
         </div>
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Create</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">Project creation continues into the current rendering and publishing pipeline.</p>
+          <p className="text-sm font-semibold text-white">Scripts</p>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            {selectedScripts.length} selected for render
+            <br />
+            <span className="text-zinc-500">{selectedScripts.map((item) => item.style).join(', ') || 'No scripts selected yet'}</span>
+          </p>
         </div>
+      </div>
+      <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/70 p-5">
+        <p className="text-sm font-semibold text-white">Create flow handoff</p>
+        <p className="mt-2 text-sm leading-6 text-zinc-400">
+          The next action stores this wizard state as a draft and opens the existing confirmation page. Real rendering still happens downstream in the current Sprokl pipeline after project creation.
+        </p>
       </div>
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
@@ -862,10 +1208,11 @@ function RenderStep({ onBack, onGoBrief }: { onBack: () => void; onGoBrief: () =
         </button>
         <button
           type="button"
-          onClick={onGoBrief}
+          onClick={onCreate}
+          disabled={submitting}
           className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
         >
-          Go to the working creator
+          {submitting ? 'Starting render...' : 'Start rendering'}
         </button>
       </div>
     </StepPanel>
@@ -873,6 +1220,7 @@ function RenderStep({ onBack, onGoBrief }: { onBack: () => void; onGoBrief: () =
 }
 
 export function CreateVideoTaskShell() {
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState<StepId>(1);
   const [productBriefDraft, setProductBriefDraft] = useState<ProductBriefDraft>({
     productName: '',
@@ -888,6 +1236,152 @@ export function CreateVideoTaskShell() {
     voice: 'nova-female',
     music: 'upbeat-trending',
   });
+  const [scriptDrafts, setScriptDrafts] = useState<ScriptDraft[]>([]);
+  const [selectedScriptIds, setSelectedScriptIds] = useState<string[]>([]);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [submittingRender, setSubmittingRender] = useState(false);
+
+  async function handleCreateFromWizard() {
+    if (submittingRender) return;
+    if (!productBriefDraft.productName.trim() || !productBriefDraft.productDescription.trim() || !productBriefDraft.sellingPoints.trim() || !productBriefDraft.targetAudience.trim()) {
+      toast.error('Complete the product brief before rendering');
+      setCurrentStep(2);
+      return;
+    }
+    if (selectedAssetIds.length === 0) {
+      toast.error('Select at least one library asset before rendering');
+      setCurrentStep(1);
+      return;
+    }
+    if (selectedScriptIds.length === 0) {
+      toast.error('Select at least one script before rendering');
+      setCurrentStep(4);
+      return;
+    }
+
+    setSubmittingRender(true);
+    const draftText = buildDraftText(productBriefDraft, scriptDrafts, selectedScriptIds);
+    const primaryScript = scriptDrafts.find((item) => selectedScriptIds.includes(item.id)) ?? scriptDrafts[0] ?? null;
+    const projectName = productBriefDraft.productName.trim().slice(0, 120);
+
+    try {
+      const created = await Api.createProject({
+        name: projectName,
+        productName: productBriefDraft.productName.trim(),
+        productDescription: productBriefDraft.productDescription.trim(),
+        sellingPoints: productBriefDraft.sellingPoints.trim(),
+        targetAudience: productBriefDraft.targetAudience.trim(),
+        durationSeconds: settingsDraft.duration,
+        language: settingsDraft.language,
+        aspectRatio:
+          settingsDraft.aspectRatio === '9:16'
+            ? 'vertical_9_16'
+            : settingsDraft.aspectRatio === '1:1'
+              ? 'square_1_1'
+              : 'landscape_16_9',
+      });
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('project:updated', {
+            detail: {
+              id: created.id,
+              status: 'generating',
+              title: created.title,
+            },
+          }),
+        );
+        window.dispatchEvent(
+          new CustomEvent('project:created', {
+            detail: {
+              ...created,
+              status: 'generating',
+            },
+          }),
+        );
+      }
+
+      toast.success('Task created. Rendering started.');
+      router.push('/workspace#projects-section');
+
+      void (async () => {
+        try {
+          await Api.importProjectAssets(created.id, selectedAssetIds);
+          await Api.updateProject(created.id, {
+            renderOptions: {
+              captionsEnabled: true,
+              backgroundMusicEnabled: settingsDraft.music !== 'none',
+              stylePreset: 'balanced',
+              useHookClip: true,
+              animateImages: true,
+              shuffleVideoSlices: true,
+            },
+          });
+
+          const generatedResult = await Api.generateProjectScripts(created.id, { overwrite: true }) as {
+            scripts?: Array<{
+              id: string;
+              styleLabel: string;
+              hookText: string;
+              bodyText: string;
+              ctaText: string;
+              isSelected: boolean;
+            }>;
+          };
+
+          const generatedScripts = Array.isArray(generatedResult?.scripts) ? generatedResult.scripts : [];
+          for (const generatedScript of generatedScripts) {
+            const localScript =
+              scriptDrafts.find((item) => item.style === generatedScript.styleLabel) ??
+              scriptDrafts.find((item) => item.style.toLowerCase() === generatedScript.styleLabel.toLowerCase());
+
+            if (!localScript) continue;
+
+            await Api.updateProjectScript(created.id, generatedScript.id, {
+              styleLabel: generatedScript.styleLabel,
+              hookText: localScript.hook,
+              bodyText: localScript.body,
+              ctaText: localScript.cta,
+              isSelected: selectedScriptIds.includes(localScript.id),
+            });
+          }
+
+          await Api.createVideoJobs(created.id, { overwrite: true });
+          await Api.processVideoJobs(created.id);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('project:updated', {
+                detail: {
+                  id: created.id,
+                  status: 'generating',
+                  title: created.title,
+                },
+              }),
+            );
+          }
+        } catch (error: any) {
+          const message = error?.error?.message || 'Project was created, but render startup needs attention.';
+          toast.error(message);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('project:updated', {
+                detail: {
+                  id: created.id,
+                  status: 'draft',
+                  title: created.title,
+                },
+              }),
+            );
+          }
+        }
+      })();
+    } catch (error: any) {
+      const message = error?.error?.message || 'The project was not fully started. Please review the project in workspace.';
+      toast.error(message);
+    } finally {
+      setSubmittingRender(false);
+    }
+  }
 
   return (
     <div className="-m-4 min-h-[calc(100vh-65px)] overflow-hidden bg-zinc-950 text-zinc-100 sm:-m-6">
@@ -907,7 +1401,13 @@ export function CreateVideoTaskShell() {
         <div className="space-y-6">
           <WizardProgress currentStep={currentStep} onSelect={setCurrentStep} />
 
-          {currentStep === 1 ? <MediaStep onNext={() => setCurrentStep(2)} /> : null}
+          {currentStep === 1 ? (
+            <MediaStep
+              selectedIds={selectedAssetIds}
+              onChangeSelectedIds={setSelectedAssetIds}
+              onNext={() => setCurrentStep(2)}
+            />
+          ) : null}
 
           {currentStep === 2 ? <ProductBriefStep draft={productBriefDraft} onChange={setProductBriefDraft} /> : null}
 
@@ -920,9 +1420,29 @@ export function CreateVideoTaskShell() {
             />
           ) : null}
 
-          {currentStep === 4 ? <ScriptsStep onBack={() => setCurrentStep(3)} onNext={() => setCurrentStep(5)} /> : null}
+          {currentStep === 4 ? (
+            <ScriptsStep
+              productName={productBriefDraft.productName}
+              scripts={scriptDrafts}
+              selectedIds={selectedScriptIds}
+              onChangeScripts={setScriptDrafts}
+              onChangeSelectedIds={setSelectedScriptIds}
+              onBack={() => setCurrentStep(3)}
+              onNext={() => setCurrentStep(5)}
+            />
+          ) : null}
 
-          {currentStep === 5 ? <RenderStep onBack={() => setCurrentStep(4)} onGoBrief={() => setCurrentStep(2)} /> : null}
+          {currentStep === 5 ? (
+            <RenderStep
+              productBrief={productBriefDraft}
+              settings={settingsDraft}
+              scripts={scriptDrafts}
+              selectedIds={selectedScriptIds}
+              submitting={submittingRender}
+              onCreate={handleCreateFromWizard}
+              onBack={() => setCurrentStep(4)}
+            />
+          ) : null}
         </div>
       </div>
     </div>

@@ -63,6 +63,12 @@ export async function api<T>(url: string, init?: ApiRequestInit): Promise<T> {
 
 export const Api = {
   getChannels: () => api('/api/channels', { showErrorToast: false }),
+  startTikTokChannelOAuth: () =>
+    api<{ authUrl: string }>('/api/channels/oauth/tiktok/start', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      errorToastTitle: 'Failed to start TikTok connection',
+    }),
   createChannel: (payload: {
     platform: 'tiktok' | 'instagram_reels' | 'youtube_shorts';
     displayName: string;
@@ -152,6 +158,12 @@ export const Api = {
       method: 'PATCH',
       body: JSON.stringify(payload),
       errorToastTitle: 'Failed to update project',
+    }),
+  importProjectAssets: (id: string, assetIds: string[]) =>
+    api<{ selectedAssetIds: string[] }>(`/api/projects/${id}/assets/import`, {
+      method: 'POST',
+      body: JSON.stringify({ assetIds }),
+      errorToastTitle: 'Failed to import assets',
     }),
   generateProjectScripts: (id: string, payload?: { overwrite?: boolean }) =>
     api(`/api/projects/${id}/scripts/generate`, {

@@ -340,8 +340,8 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
   });
   if (!project) return notFound('Project not found');
 
-  const selectedAssetIds = Array.from(new Set(parsed.data.selectedAssetIds ?? []));
-  const hookAssetId = parsed.data.hookAssetId === undefined ? undefined : parsed.data.hookAssetId;
+  let selectedAssetIds = Array.from(new Set(parsed.data.selectedAssetIds ?? []));
+  let hookAssetId = parsed.data.hookAssetId === undefined ? undefined : parsed.data.hookAssetId;
   const promoEnabled = parsed.data.promoEnabled;
   const promoInfoPatch = parsed.data.promoInfo;
   const renderOptionsPatch = parsed.data.renderOptions;
@@ -356,22 +356,78 @@ export const PATCH = withApiError(async function PATCH(req: NextRequest, { param
       where: {
         id: { in: allRequestedIds },
         userId: auth.userId,
-        projectId: project.id,
       },
-      select: { id: true, type: true },
+      select: {
+        id: true,
+        userId: true,
+        projectId: true,
+        type: true,
+        filename: true,
+        storageUrl: true,
+        thumbnailUrl: true,
+        sizeBytes: true,
+        mimeType: true,
+        durationSeconds: true,
+        width: true,
+        height: true,
+        expiresAt: true,
+      },
     });
     const foundIds = new Set(assets.map((asset) => asset.id));
     const missingIds = allRequestedIds.filter((id) => !foundIds.has(id));
     if (missingIds.length > 0) {
-      return error('VALIDATION_ERROR', 'One or more assets do not belong to this project', 400, { missingAssetIds: missingIds });
+      return error('VALIDATION_ERROR', 'One or more assets do not belong to your account', 400, { missingAssetIds: missingIds });
     }
 
-    const hookAsset = hookAssetId ? assets.find((asset) => asset.id === hookAssetId) : null;
+    const clonedAssetIdBySourceId = new Map<string, string>();
+    const resolvedAssets = await prisma.$transaction(async (tx) => {
+      const resolved: Array<{ id: string; type: string }> = [];
+
+      for (const asset of assets) {
+        if (asset.projectId === project.id) {
+          resolved.push({ id: asset.id, type: asset.type });
+          continue;
+        }
+
+        const cloned = await tx.asset.create({
+          data: {
+            userId: auth.userId,
+            projectId: project.id,
+            type: asset.type,
+            filename: asset.filename,
+            storageUrl: asset.storageUrl,
+            thumbnailUrl: asset.thumbnailUrl,
+            sizeBytes: asset.sizeBytes,
+            mimeType: asset.mimeType,
+            durationSeconds: asset.durationSeconds,
+            width: asset.width,
+            height: asset.height,
+            expiresAt: asset.expiresAt,
+          },
+          select: { id: true, type: true },
+        });
+
+        clonedAssetIdBySourceId.set(asset.id, cloned.id);
+        resolved.push(cloned);
+      }
+
+      return resolved;
+    });
+
+    selectedAssetIds = selectedAssetIds.map((id) => clonedAssetIdBySourceId.get(id) ?? id);
+    hookAssetId =
+      hookAssetId === undefined
+        ? undefined
+        : hookAssetId === null
+          ? null
+          : clonedAssetIdBySourceId.get(hookAssetId) ?? hookAssetId;
+
+    const hookAsset = hookAssetId ? resolvedAssets.find((asset) => asset.id === hookAssetId) : null;
     if (hookAsset && hookAsset.type !== 'hook') {
       return error('VALIDATION_ERROR', 'Hook asset must use asset type "hook"', 400);
     }
 
-    const invalidSelected = assets.filter((asset) => selectedAssetIds.includes(asset.id) && asset.type === 'hook');
+    const invalidSelected = resolvedAssets.filter((asset) => selectedAssetIds.includes(asset.id) && asset.type === 'hook');
     if (invalidSelected.length > 0) {
       return error('VALIDATION_ERROR', 'Hook assets cannot be added to selected asset IDs', 400, {
         invalidSelectedAssetIds: invalidSelected.map((asset) => asset.id),

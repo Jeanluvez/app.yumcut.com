@@ -565,7 +565,7 @@ export function WorkspaceShell() {
         </Card>
 
         <div className="grid min-w-0 gap-6">
-          <Card>
+          <Card id="projects-section">
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>Recent Projects</CardTitle>
               <CardDescription>{loading ? 'Loading projects...' : projectCountLabel}</CardDescription>
