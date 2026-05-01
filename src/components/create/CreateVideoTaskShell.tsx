@@ -473,7 +473,7 @@ function MediaStep({
                   Use the existing workspace upload flow first, then come back to start this wizard from your library.
                 </p>
                 <Link
-                  href="/workspace#assets-section"
+                  href="/workspace/assets"
                   className="mt-4 inline-flex rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-100 transition hover:bg-blue-500/15"
                 >
                   Open My Assets
@@ -496,7 +496,7 @@ function MediaStep({
                 </div>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <Link
-                    href="/workspace#assets-section"
+                    href="/workspace/assets"
                     className="rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-100 transition hover:bg-blue-500/15"
                   >
                     Manage library
@@ -1302,7 +1302,7 @@ export function CreateVideoTaskShell() {
       }
 
       toast.success('Task created. Rendering started.');
-      router.push('/workspace#projects-section');
+      router.push('/workspace/projects');
 
       void (async () => {
         try {

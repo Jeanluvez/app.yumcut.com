@@ -69,18 +69,18 @@ export function AccountMenuContent() {
 
   return (
     <>
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-        <div className="text-sm font-medium">{t.settings}</div>
-        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+      <div className="border-b border-zinc-800 px-4 py-3">
+        <div className="text-sm font-medium text-zinc-100">{t.settings}</div>
+        <div className="mt-2 text-xs text-zinc-500">
           <span>{t.balance}</span>
-          <span className="ml-1 font-semibold text-gray-900 dark:text-gray-100">{tokensLoading ? '—' : tokenBalance.toLocaleString()}</span>
+          <span className="ml-1 font-semibold text-zinc-100">{tokensLoading ? '—' : tokenBalance.toLocaleString()}</span>
           <span className="ml-1">{t.tokens}</span>
         </div>
       </div>
       <div className="p-2 space-y-1">
         {isAdmin ? (
           <PopoverClose asChild>
-            <Button asChild variant="ghost" className="w-full justify-start gap-2 text-red-600 dark:text-red-400">
+            <Button asChild variant="ghost" className="w-full justify-start gap-2 text-rose-300 hover:bg-zinc-800 hover:text-rose-200">
               <Link href="/admin" className="flex items-center gap-2">
                 <Shield className="h-4 w-4" />
                 <span>{t.administrator}</span>
@@ -89,7 +89,7 @@ export function AccountMenuContent() {
           </PopoverClose>
         ) : null}
         <PopoverClose asChild>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2">
+          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
             <Link href="/account" className="flex items-center gap-2">
               <User className="h-4 w-4" />
               <span>{t.account}</span>
@@ -97,7 +97,7 @@ export function AccountMenuContent() {
           </Button>
         </PopoverClose>
         <PopoverClose asChild>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2">
+          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
             <Link href="/tokens/activity" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
               <span>{t.tokenActivity}</span>
@@ -105,7 +105,7 @@ export function AccountMenuContent() {
           </Button>
         </PopoverClose>
         <PopoverClose asChild>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2">
+          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
             <a href={`mailto:${CONTACT_EMAIL}`} className="flex items-center gap-2">
               <Mail className="h-4 w-4" />
               <span>{t.support}</span>
@@ -117,24 +117,25 @@ export function AccountMenuContent() {
       <div>
         <Dialog>
           <DialogTrigger asChild>
-            <button className="w-full flex items-center gap-2 px-4 py-3 text-sm hover:bg-gray-50 dark:hover:bg-gray-900">
-              <LogOut className="h-4 w-4 text-red-600" />
-              <span className="text-red-600">{t.logOut}</span>
+            <button className="flex w-full items-center gap-2 px-4 py-3 text-sm text-rose-300 transition hover:bg-zinc-800">
+              <LogOut className="h-4 w-4 text-rose-300" />
+              <span>{t.logOut}</span>
             </button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="border-zinc-800 bg-zinc-950 p-6 text-zinc-100 shadow-2xl">
             <DialogHeader>
-              <DialogTitle>{t.signOutTitle}</DialogTitle>
+              <DialogTitle className="text-zinc-100">{t.signOutTitle}</DialogTitle>
             </DialogHeader>
-            <DialogDescription>
+            <DialogDescription className="text-zinc-400">
               {t.signOutDescription}
             </DialogDescription>
             <div className="mt-4 flex justify-end gap-2">
               <DialogClose asChild>
-                <Button variant="ghost">{t.cancel}</Button>
+                <Button variant="ghost" className="text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">{t.cancel}</Button>
               </DialogClose>
               <Button
                 variant="destructive"
+                className="bg-rose-600 text-white hover:bg-rose-700"
                 disabled={signingOut}
                 onClick={async () => {
                   if (signingOut) return;

@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation';
-import { HomeShell } from '@/components/home/HomeShell';
+import { WorkspaceShell } from '@/components/workspace/WorkspaceShell';
 import { getAuthSession } from '@/server/auth';
 
-export default async function WorkspacePage() {
+export default async function WorkspaceProjectsPage() {
   const session = await getAuthSession();
   if (!session?.user?.id) {
     redirect('/sign-in');
   }
 
-  return <HomeShell />;
+  return <WorkspaceShell section="projects" />;
 }

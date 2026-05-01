@@ -1,6 +1,5 @@
 "use client";
 import Link from 'next/link';
-import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { Api } from '@/lib/api-client';
 import { StatusIcon } from '@/components/common/StatusIcon';
@@ -21,26 +20,26 @@ const CREATE_SURFACE_NAV_ITEMS = [
   {
     id: 'home',
     label: 'Home',
-    href: '/',
+    href: '/workspace',
     icon: Home,
-    description: 'Overview and entry point',
-    match: (pathname: string | null) => pathname === '/',
+    description: 'Quick start and templates',
+    match: (pathname: string | null) => pathname === '/workspace',
   },
   {
     id: 'projects',
     label: 'Projects',
-    href: '/workspace#projects-section',
+    href: '/workspace/projects',
     icon: Video,
-    description: 'Project queue',
-    match: (pathname: string | null) => pathname?.startsWith('/workspace') ?? false,
+    description: 'Generated video results',
+    match: (pathname: string | null) => pathname?.startsWith('/workspace/projects') ?? false,
   },
   {
     id: 'assets',
     label: 'My Assets',
-    href: '/workspace#assets-section',
+    href: '/workspace/assets',
     icon: ImageIcon,
-    description: 'Uploaded media',
-    match: (pathname: string | null) => pathname?.startsWith('/workspace') ?? false,
+    description: 'Product info and uploads',
+    match: (pathname: string | null) => pathname?.startsWith('/workspace/assets') ?? false,
   },
 ] as const;
 
@@ -48,15 +47,21 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
   const { language } = useAppLanguage();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hash, setHash] = useState('');
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const isAdmin = !!(session?.user as any)?.isAdmin;
   const pathname = usePathname();
   const { settings, update } = useSettings();
   const isCreateSurface =
     pathname === '/' ||
     pathname?.startsWith('/create') ||
-    pathname?.startsWith('/workspace');
+    pathname?.startsWith('/workspace') ||
+    pathname?.startsWith('/project') ||
+    pathname?.startsWith('/assets');
+  const isAuthRoute =
+    pathname?.startsWith('/sign-in') ||
+    pathname?.startsWith('/sign-up') ||
+    pathname?.startsWith('/sso-callback');
+  const hideOnPublicHome = pathname === '/' && status !== 'authenticated';
 
   useEffect(() => {
     setLoading(true);
@@ -64,15 +69,6 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
       .then((r: any) => setItems(r))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const syncHash = () => setHash(window.location.hash || '');
-    syncHash();
-    window.addEventListener('hashchange', syncHash);
-    return () => window.removeEventListener('hashchange', syncHash);
   }, []);
 
   // Listen for project deletions to remove from the list immediately
@@ -138,6 +134,9 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
   const noProjectsLabel = language === 'ru' ? 'Пока нет проектов' : 'No projects for now';
 
   if (isCreateSurface) {
+    if (hideOnPublicHome || isAuthRoute) {
+      return null;
+    }
     return (
       <aside
         className={cn(
@@ -147,24 +146,6 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
         )}
       >
         <div className="flex h-full flex-col">
-          <div className={cn('flex h-14 items-center border-b border-zinc-800/60', open ? 'px-4 gap-2.5' : 'justify-center px-0')}>
-            <Link href="/" className="flex min-w-0 items-center gap-2.5 group">
-              <Image
-                src="/logo-design.png"
-                alt="Sprokl logo"
-                width={28}
-                height={28}
-                className="h-7 w-7 object-contain"
-                priority
-              />
-              {open ? (
-                <span className="truncate text-[15px] font-bold tracking-tight text-zinc-100 transition-colors duration-150 group-hover:text-blue-300">
-                  Sprokl
-                </span>
-              ) : null}
-            </Link>
-          </div>
-
           <div className="border-b border-zinc-800/60 p-2">
             <Link
               href="/create"
@@ -181,11 +162,7 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
 
           <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
             {CREATE_SURFACE_NAV_ITEMS.map(({ id, label, href, icon: Icon, description, match }) => {
-              const active = id === 'projects'
-                ? pathname?.startsWith('/workspace') && hash !== '#assets-section'
-                : id === 'assets'
-                  ? pathname?.startsWith('/workspace') && hash === '#assets-section'
-                  : match(pathname);
+              const active = match(pathname);
               return (
                 <a
                   key={id}
@@ -205,14 +182,9 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
                     )}
                   />
                   {open ? (
-                    <div className="min-w-0">
-                      <p className={cn('text-sm font-semibold leading-tight', active ? 'text-blue-300' : 'text-zinc-300 group-hover:text-zinc-100')}>
-                        {label}
-                      </p>
-                      <p className="truncate text-[10px] text-zinc-600 transition-colors duration-150 group-hover:text-zinc-500">
-                        {description}
-                      </p>
-                    </div>
+                    <span className={cn('truncate text-sm font-semibold leading-tight', active ? 'text-blue-300' : 'text-zinc-300 group-hover:text-zinc-100')}>
+                      {label}
+                    </span>
                   ) : null}
                   {active ? <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-blue-400" /> : null}
                 </a>
@@ -221,6 +193,25 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
           </nav>
 
           <div className="border-t border-zinc-800/60 p-2">
+            {status === 'authenticated' ? (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    className={cn(
+                      'mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-zinc-300 transition-all duration-150 hover:bg-zinc-800/60 hover:text-zinc-100',
+                      !open && 'justify-center px-0',
+                    )}
+                    title={displayName}
+                  >
+                    <User className="h-4 w-4 shrink-0" />
+                    {open ? <span className="truncate text-sm font-medium">{displayName}</span> : null}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="end" className="w-72 border-zinc-800 bg-zinc-950 p-0 text-zinc-100 shadow-2xl">
+                  <AccountMenuContent />
+                </PopoverContent>
+              </Popover>
+            ) : null}
             <button
               onClick={() => update('sidebarOpen' as any, !open)}
               className={cn(
@@ -236,6 +227,10 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
         </div>
       </aside>
     );
+  }
+
+  if (hideOnPublicHome || isAuthRoute) {
+    return null;
   }
 
   return (

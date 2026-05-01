@@ -14,7 +14,7 @@ const QUICK_START_ITEMS = [
   {
     title: 'Create from Asset Library',
     description: 'Reuse uploaded product images and videos from your workspace library.',
-    href: '/workspace#assets-section',
+    href: '/workspace/assets',
     icon: FolderOpen,
     accent: 'from-emerald-500/20 to-cyan-500/10',
   },
@@ -76,7 +76,7 @@ export function HomeShell() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
-                  href="/workspace#projects-section"
+                  href="/workspace/projects"
                   className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-6 py-3 font-medium text-zinc-100 transition-all duration-150 hover:border-zinc-600 hover:bg-zinc-800"
                 >
                   View Projects

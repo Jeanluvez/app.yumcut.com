@@ -35,7 +35,10 @@ export function HeaderAccountMenu() {
           <User className="h-5 w-5" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(320px,calc(100vw-1rem))] p-0">
+      <PopoverContent
+        align="end"
+        className="w-[min(320px,calc(100vw-1rem))] border-zinc-800 bg-zinc-950 p-0 text-zinc-100 shadow-2xl"
+      >
         <AccountMenuContent />
       </PopoverContent>
     </Popover>

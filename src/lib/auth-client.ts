@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth, useClerk, useSignIn, useUser } from '@clerk/nextjs';
+import { useAuth, useClerk, useUser } from '@clerk/nextjs';
 import { useMemo } from 'react';
 
 type SessionStatus = 'loading' | 'authenticated' | 'unauthenticated';
@@ -50,15 +50,27 @@ export function useSession(): { data: ClientSession; status: SessionStatus } {
 }
 
 export function useAuthActions() {
+  const { isLoaded: authLoaded } = useAuth();
   const clerk = useClerk();
-  const { isLoaded, signIn } = useSignIn();
 
-  async function startSignIn(provider?: 'google' | 'apple') {
-    const completeUrl = process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL || '/workspace';
+  async function startSignIn(provider?: 'google' | 'apple', options?: { mode?: 'sign-in' | 'sign-up' }) {
+    const completeUrl =
+      options?.mode === 'sign-up'
+        ? process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL || '/workspace'
+        : process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL || '/workspace';
 
-    if (provider && isLoaded && signIn) {
+    if (provider) {
+      const authResource =
+        options?.mode === 'sign-up'
+          ? clerk.client?.signUp
+          : clerk.client?.signIn;
+
+      if (!authResource) {
+        throw new Error(`Clerk ${options?.mode === 'sign-up' ? 'sign-up' : 'sign-in'} is not ready for ${provider} OAuth.`);
+      }
+
       const strategy = provider === 'google' ? 'oauth_google' : 'oauth_apple';
-      await signIn.authenticateWithRedirect({
+      await authResource.authenticateWithRedirect({
         strategy,
         redirectUrl: '/sso-callback',
         redirectUrlComplete: completeUrl,
@@ -81,6 +93,7 @@ export function useAuthActions() {
   }
 
   return {
+    ready: authLoaded && clerk.loaded && !!clerk.client,
     signIn: startSignIn,
     signOut: startSignOut,
   };

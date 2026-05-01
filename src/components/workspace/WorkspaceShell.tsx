@@ -280,9 +280,8 @@ function formatBytesCompact(value: string | number | bigint) {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`.replace('.00', '');
 }
 
-export function WorkspaceShell() {
+export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' | 'assets' }) {
   const { items, loading, refresh } = useProjects();
-  const [workspaceSection, setWorkspaceSection] = useState<'projects' | 'assets'>('projects');
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -491,18 +490,6 @@ export function WorkspaceShell() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const syncSection = () => {
-      setWorkspaceSection(window.location.hash === '#assets-section' ? 'assets' : 'projects');
-    };
-
-    syncSection();
-    window.addEventListener('hashchange', syncSection);
-    return () => window.removeEventListener('hashchange', syncSection);
-  }, []);
-
-  useEffect(() => {
     refresh();
   }, [refresh]);
 
@@ -690,7 +677,7 @@ export function WorkspaceShell() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      {workspaceSection === 'projects' ? (
+      {section === 'projects' ? (
         <Card id="projects-section" className="border-zinc-800 bg-transparent shadow-none">
             <CardHeader className="flex-col items-start gap-2">
               <div>
@@ -1033,7 +1020,7 @@ export function WorkspaceShell() {
                   return (
                     <Link
                       key={group.id}
-                      href={canOpenProject ? `/project/${group.id}` : '/workspace#assets-section'}
+                      href={canOpenProject ? `/assets/${group.id}` : '/workspace/assets'}
                       className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/80 transition-all hover:border-zinc-700"
                     >
                       <div className={`relative h-40 border-b border-zinc-800 bg-gradient-to-br ${previewTone}`}>

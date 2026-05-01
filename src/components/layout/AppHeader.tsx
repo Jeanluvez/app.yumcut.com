@@ -11,19 +11,25 @@ import { useProjects } from '@/components/providers/ProjectsProvider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { HeaderAccountMenu } from '@/components/layout/HeaderAccountMenu';
 import { cn } from '@/lib/utils';
+import { useSession } from '@/lib/auth-client';
 
 export function AppHeader() {
   const { items, loading } = useProjects();
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const hideAccountMenuOnDesktop =
-    pathname === '/' ||
-    pathname?.startsWith('/create') ||
-    pathname?.startsWith('/workspace');
+  const { status } = useSession();
+  const isAuthRoute =
+    pathname?.startsWith('/sign-in') ||
+    pathname?.startsWith('/sign-up') ||
+    pathname?.startsWith('/sso-callback');
+  const isPublicHome = pathname === '/' && status !== 'authenticated';
   const isCreateSurface =
     pathname === '/' ||
     pathname?.startsWith('/create') ||
-    pathname?.startsWith('/workspace');
+    pathname?.startsWith('/workspace') ||
+    pathname?.startsWith('/project') ||
+    pathname?.startsWith('/assets');
+  const brandHref = pathname === '/' ? '/' : '/workspace';
 
   useEffect(() => {
     function handleProjectSelect() {
@@ -34,6 +40,11 @@ export function AppHeader() {
       return () => window.removeEventListener('project:list-clicked', handleProjectSelect as any);
     }
   }, []);
+
+  if (isAuthRoute) {
+    return null;
+  }
+
   return (
     <header
       className={cn(
@@ -73,13 +84,30 @@ export function AppHeader() {
             </ScrollArea>
           </PopoverContent>
         </Popover>
-        <Link href="/" className={cn('font-semibold tracking-tight', isCreateSurface ? 'text-zinc-100' : '')}>
+        <Link href={brandHref} className={cn('font-semibold tracking-tight', isCreateSurface ? 'text-zinc-100' : '')}>
           {APP_NAME}
         </Link>
       </div>
-      <div className={cn('flex items-center gap-1', hideAccountMenuOnDesktop && 'md:hidden')}>
-        <HeaderAccountMenu />
-      </div>
+      {isPublicHome ? (
+        <div className="flex items-center gap-2">
+          <Link
+            href="/sign-in"
+            className="inline-flex items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition-all duration-150 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/sign-up"
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"
+          >
+            Start free
+          </Link>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1">
+          <HeaderAccountMenu />
+        </div>
+      )}
     </header>
   );
 }

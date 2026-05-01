@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Loader2, PencilLine, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Film,
+  Loader2,
+  PencilLine,
+  Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Api } from '@/lib/api-client';
 import { Badge } from '@/components/ui/badge';
@@ -117,8 +126,8 @@ function statusVariant(status: string) {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <div className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</div>
-      <div className="text-sm text-gray-900 dark:text-gray-100">{value}</div>
+      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className="text-sm text-zinc-100">{value}</div>
     </div>
   );
 }
@@ -129,6 +138,23 @@ function formatBytes(value: string) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDurationShort(seconds: number | null | undefined) {
+  if (!seconds || !Number.isFinite(seconds)) return '0:30';
+  const mins = Math.floor(seconds / 60);
+  const remain = seconds % 60;
+  return `${mins}:${String(remain).padStart(2, '0')}`;
+}
+
+function getTimeUntilExpiry(expiresAt: string) {
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (!Number.isFinite(diff)) return null;
+  if (diff <= 0) return 'Expired';
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours < 24) return `${hours}h left`;
+  const days = Math.floor(hours / 24);
+  return `${days}d left`;
 }
 
 function toLocalDateTimeInputValue(value?: string | null) {
@@ -145,7 +171,9 @@ function toLocalDateTimeInputValue(value?: string | null) {
 }
 
 export function ProjectDetailShell({ projectId }: { projectId: string }) {
+  const showLegacyProjectSections = false;
   const [project, setProject] = useState<ProjectDetail | null>(null);
+  const [activeVideoIndex, setActiveVideoIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generatingScripts, setGeneratingScripts] = useState(false);
@@ -529,14 +557,22 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!project) return;
+    setActiveVideoIndex((current) => {
+      if (project.videos.length === 0) return 0;
+      return Math.min(current, project.videos.length - 1);
+    });
+  }, [project]);
+
   if (loading) {
-    return <div className="mx-auto w-full max-w-6xl px-4 py-6 text-sm text-gray-500 dark:text-gray-400">Loading project...</div>;
+    return <div className="mx-auto w-full max-w-6xl px-4 py-6 text-sm text-zinc-500">Loading project...</div>;
   }
 
   if (loadError || !project) {
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6">
-        <div className="text-sm text-red-600 dark:text-red-400">{loadError || 'Project not found'}</div>
+        <div className="text-sm text-rose-300">{loadError || 'Project not found'}</div>
         <div>
           <Button asChild variant="outline">
             <Link href="/workspace">Back to Workspace</Link>
@@ -546,26 +582,191 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     );
   }
 
+  const activeVideo = project.videos[activeVideoIndex] ?? null;
+  const activeExpiryLabel = activeVideo ? getTimeUntilExpiry(activeVideo.expiresAt) : null;
+  const canMovePrev = activeVideoIndex > 0;
+  const canMoveNext = activeVideoIndex < project.videos.length - 1;
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{project.title}</h1>
-            <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-3">
+          <Button asChild variant="ghost" className="h-10 rounded-2xl px-3 text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100">
+            <Link href="/workspace/projects">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Projects
+            </Link>
+          </Button>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-3xl font-semibold tracking-tight text-zinc-100">{project.title}</h1>
+              <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
+            </div>
+            <p className="max-w-3xl text-sm leading-6 text-zinc-400">
+              Review generated variants, download outputs, and adjust the underlying project settings from one place.
+            </p>
           </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">This is the current MVP project record. Assets, scripts, and jobs will attach here next.</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/workspace">Back to Workspace</Link>
+        <Button asChild className="rounded-2xl bg-white text-zinc-950 hover:bg-zinc-200">
+          <Link href="/workspace/projects">Back to List</Link>
         </Button>
       </div>
 
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_360px]">
+        <Card className="overflow-hidden rounded-[32px] border-zinc-800 bg-zinc-900/75 text-zinc-100">
+          <CardContent className="p-0">
+            <div className="relative flex min-h-[560px] items-center justify-center bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.24),transparent_32%),linear-gradient(180deg,rgba(24,24,27,0.98),rgba(9,9,11,0.98))] p-6">
+              <button
+                type="button"
+                onClick={() => setActiveVideoIndex((current) => Math.max(0, current - 1))}
+                disabled={!canMovePrev}
+                className="absolute left-4 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-2xl border border-zinc-700 bg-black/35 text-zinc-100 backdrop-blur transition hover:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Previous variant"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveVideoIndex((current) => Math.min(project.videos.length - 1, current + 1))}
+                disabled={!canMoveNext}
+                className="absolute right-4 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-2xl border border-zinc-700 bg-black/35 text-zinc-100 backdrop-blur transition hover:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Next variant"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+
+              <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-black/35 px-3 py-1.5 text-xs font-medium text-zinc-100 backdrop-blur">
+                <Film className="h-3.5 w-3.5" />
+                {activeVideo ? `${activeVideoIndex + 1} / ${project.videos.length}` : 'No variants yet'}
+              </div>
+
+              {activeVideo ? (
+                <div className="relative aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-[28px] border border-zinc-700 bg-black shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+                  {activeVideo.thumbnailUrl ? (
+                    <img
+                      src={activeVideo.thumbnailUrl}
+                      alt={activeVideo.variantLabel || 'Video variant preview'}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-950 via-indigo-950 to-zinc-950">
+                      <div className="text-center">
+                        <Film className="mx-auto h-10 w-10 text-zinc-300" />
+                        <div className="mt-3 text-sm font-medium text-zinc-200">
+                          {activeVideo.variantLabel || `Variant ${activeVideoIndex + 1}`}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4">
+                    <div className="text-sm font-medium text-zinc-100">
+                      {activeVideo.variantLabel || `Variant ${activeVideoIndex + 1}`}
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-300">
+                      {formatDurationShort(activeVideo.durationSeconds)} • {formatBytes(activeVideo.fileSizeBytes)}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex aspect-[9/16] w-full max-w-[360px] items-center justify-center rounded-[28px] border border-dashed border-zinc-700 bg-zinc-950/80">
+                  <div className="text-center text-zinc-400">
+                    <Film className="mx-auto h-10 w-10" />
+                    <div className="mt-3 text-sm">No generated videos yet</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {project.videos.length > 1 ? (
+              <div className="border-t border-zinc-800 px-4 py-4">
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {project.videos.map((video, index) => (
+                    <button
+                      key={video.id}
+                      type="button"
+                      onClick={() => setActiveVideoIndex(index)}
+                      className={`min-w-[120px] overflow-hidden rounded-2xl border text-left transition ${
+                        index === activeVideoIndex
+                          ? 'border-blue-400/50 bg-blue-500/10'
+                          : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex h-20 items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900">
+                        <Film className="h-5 w-5 text-zinc-300" />
+                      </div>
+                      <div className="space-y-1 p-3">
+                        <div className="truncate text-xs font-medium text-zinc-100">
+                          {video.variantLabel || `Variant ${index + 1}`}
+                        </div>
+                        <div className="text-[11px] text-zinc-500">{formatDurationShort(video.durationSeconds)}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[32px] border-zinc-800 bg-zinc-900/75 text-zinc-100">
+          <CardContent className="space-y-6 p-6">
+            <Button
+              asChild
+              variant="outline"
+              className="h-auto w-full justify-start rounded-3xl border-zinc-700 bg-zinc-950 px-5 py-4 text-left text-zinc-100 hover:border-zinc-600 hover:bg-zinc-900"
+            >
+              <a href={activeVideo ? `/api/videos/${activeVideo.id}/download` : '#'} aria-disabled={!activeVideo}>
+                <Download className="mr-3 h-5 w-5" />
+                <span className="text-base font-semibold">Download</span>
+              </a>
+            </Button>
+
+            <div className="space-y-4 rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Variant Info</div>
+                <div className="mt-2 text-xl font-semibold text-zinc-100">
+                  {activeVideo?.variantLabel || `Variant ${activeVideoIndex + 1}`}
+                </div>
+              </div>
+
+              <div className="grid gap-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500">Created</span>
+                  <span className="text-zinc-100">
+                    {activeVideo ? new Date(activeVideo.createdAt).toLocaleString() : 'Pending'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500">Status</span>
+                  <span className="text-zinc-100">{project.status}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500">Expires</span>
+                  <span className={activeExpiryLabel === 'Expired' ? 'text-rose-300' : 'text-zinc-100'}>
+                    {activeExpiryLabel || 'Pending'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500">File Size</span>
+                  <span className="text-zinc-100">{activeVideo ? formatBytes(activeVideo.fileSizeBytes) : 'Pending'}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-zinc-500">Downloads</span>
+                  <span className="text-zinc-100">{activeVideo?.downloadCount ?? 0}</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showLegacyProjectSections ? (
+      <>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-        <Card>
+        <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
           <CardHeader className="flex-col items-start gap-1">
             <CardTitle>Project Brief</CardTitle>
-            <CardDescription>Core fields saved from the create-project step.</CardDescription>
+            <CardDescription className="text-zinc-400">Core fields saved from the create-project step.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-5">
             <InfoRow label="Product Name" value={project.productName} />
@@ -576,10 +777,10 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
         </Card>
 
         <div className="grid gap-6">
-          <Card>
+          <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>Settings</CardTitle>
-              <CardDescription>Stored generation parameters.</CardDescription>
+              <CardDescription className="text-zinc-400">Stored generation parameters.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <InfoRow label="Duration" value={`${project.durationSeconds} seconds`} />
@@ -589,14 +790,14 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>Render Options</CardTitle>
-              <CardDescription>Control subtitles, background music, and render pacing for the next video.</CardDescription>
+              <CardDescription className="text-zinc-400">Control subtitles, background music, and render pacing for the next video.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-2">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Style Preset</div>
+                <div className="text-sm font-medium text-zinc-100">Style Preset</div>
                 <Select
                   value={draftRenderOptions.stylePreset}
                   onValueChange={(value: 'balanced' | 'punchy' | 'calm') =>
@@ -612,11 +813,11 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                     <SelectItem value="calm">Calm</SelectItem>
                   </SelectContent>
                 </Select>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
+                <div className="text-xs text-zinc-500">
                   Balanced keeps the current default. Punchy cuts faster. Calm holds shots longer with slightly softer audio.
                 </div>
               </div>
-              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+              <label className="flex items-center gap-3 text-sm text-zinc-100">
                 <Checkbox
                   checked={draftRenderOptions.captionsEnabled}
                   onCheckedChange={(checked) =>
@@ -625,7 +826,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 />
                 <span>Burn subtitles into output videos</span>
               </label>
-              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+              <label className="flex items-center gap-3 text-sm text-zinc-100">
                 <Checkbox
                   checked={draftRenderOptions.backgroundMusicEnabled}
                   onCheckedChange={(checked) =>
@@ -634,7 +835,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 />
                 <span>Include background music</span>
               </label>
-              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+              <label className="flex items-center gap-3 text-sm text-zinc-100">
                 <Checkbox
                   checked={draftRenderOptions.useHookClip}
                   onCheckedChange={(checked) =>
@@ -643,7 +844,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 />
                 <span>Use hook clip at the start</span>
               </label>
-              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+              <label className="flex items-center gap-3 text-sm text-zinc-100">
                 <Checkbox
                   checked={draftRenderOptions.animateImages}
                   onCheckedChange={(checked) =>
@@ -652,7 +853,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 />
                 <span>Animate image segments</span>
               </label>
-              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+              <label className="flex items-center gap-3 text-sm text-zinc-100">
                 <Checkbox
                   checked={draftRenderOptions.shuffleVideoSlices}
                   onCheckedChange={(checked) =>
@@ -670,13 +871,13 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>Promotion</CardTitle>
-              <CardDescription>Optional pricing context used during script generation.</CardDescription>
+              <CardDescription className="text-zinc-400">Optional pricing context used during script generation.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <label className="flex items-center gap-3 text-sm text-gray-900 dark:text-gray-100">
+              <label className="flex items-center gap-3 text-sm text-zinc-100">
                 <Checkbox
                   checked={draftPromo.promoEnabled}
                   onCheckedChange={(checked) =>
@@ -687,7 +888,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Original Price</div>
+                  <div className="text-sm font-medium text-zinc-100">Original Price</div>
                   <Input
                     value={draftPromo.originalPrice}
                     onChange={(event) => setDraftPromo((prev) => ({ ...prev, originalPrice: event.target.value }))}
@@ -697,7 +898,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Sale Price</div>
+                  <div className="text-sm font-medium text-zinc-100">Sale Price</div>
                   <Input
                     value={draftPromo.salePrice}
                     onChange={(event) => setDraftPromo((prev) => ({ ...prev, salePrice: event.target.value }))}
@@ -708,7 +909,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 </div>
               </div>
               <div className="grid gap-2">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Offer Details</div>
+                <div className="text-sm font-medium text-zinc-100">Offer Details</div>
                 <Textarea
                   value={draftPromo.discountLabel}
                   onChange={(event) => setDraftPromo((prev) => ({ ...prev, discountLabel: event.target.value }))}
@@ -727,10 +928,10 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
             <CardHeader className="flex-col items-start gap-1">
               <CardTitle>Pipeline Summary</CardTitle>
-              <CardDescription>Current attached records for this project.</CardDescription>
+              <CardDescription className="text-zinc-400">Current attached records for this project.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
               <InfoRow label="Selected Assets" value={String(project.counts.assets)} />
@@ -751,7 +952,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           onChanged={() => loadProject()}
         />
 
-        <Card>
+        <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
           <CardHeader className="flex-col items-start gap-1">
             <div className="flex w-full items-center justify-between gap-3">
               <CardTitle>Scripts</CardTitle>
@@ -760,17 +961,17 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 {project.scripts.length > 0 ? 'Regenerate Scripts' : 'Generate Scripts'}
               </Button>
             </div>
-            <CardDescription>{project.scripts.length === 0 ? 'No scripts generated yet.' : `${project.scripts.length} script variants saved.`}</CardDescription>
+            <CardDescription className="text-zinc-400">{project.scripts.length === 0 ? 'No scripts generated yet.' : `${project.scripts.length} script variants saved.`}</CardDescription>
           </CardHeader>
           <CardContent>
             {project.scripts.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+              <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-sm text-zinc-500">
                 Script generation is not wired yet in this phase.
               </div>
             ) : (
               <div className="space-y-3">
                 {project.scripts.map((script) => (
-                  <div key={script.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                  <div key={script.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <Checkbox
@@ -821,7 +1022,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
           <CardHeader className="flex-col items-start gap-1">
             <div className="flex w-full items-center justify-between gap-3">
               <CardTitle>Video Jobs</CardTitle>
@@ -847,7 +1048,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 </Button>
               </div>
             </div>
-            <CardDescription>
+            <CardDescription className="text-zinc-400">
               {project.videoJobs.length === 0
                 ? 'Create one queued job per selected script.'
                 : `${project.videoJobs.length} queued jobs prepared for the rendering worker.`}
@@ -855,37 +1056,37 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           </CardHeader>
           <CardContent>
             {project.videoJobs.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+              <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-sm text-zinc-500">
                 Video job creation is ready. The next step is to enqueue one job per selected script.
               </div>
             ) : (
               <div className="space-y-3">
                 {project.videoJobs.map((job) => (
-                  <div key={job.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                  <div key={job.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <div className="text-sm font-medium text-zinc-100">
                         Variant {job.variantIndex}: {job.styleLabel || `Script ${job.sortOrder}`}
                       </div>
                       <Badge variant={jobBadgeVariant(job.status)}>{job.status}</Badge>
                     </div>
-                    <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="mt-2 text-xs text-zinc-500">
                       Created {new Date(job.createdAt).toLocaleString()}
                       {job.errorMessage ? ` • ${job.errorMessage}` : ''}
                     </div>
                     {(job.voiceoverUrl || job.ttsTimestampsUrl || job.finalUrl) ? (
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
                         {job.voiceoverUrl ? (
-                          <a href={job.voiceoverUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                          <a href={job.voiceoverUrl} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline">
                             Voiceover
                           </a>
                         ) : null}
                         {job.ttsTimestampsUrl ? (
-                          <a href={job.ttsTimestampsUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                          <a href={job.ttsTimestampsUrl} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline">
                             Timestamps
                           </a>
                         ) : null}
                         {job.finalUrl ? (
-                          <a href={job.finalUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                          <a href={job.finalUrl} target="_blank" rel="noreferrer" className="text-blue-300 hover:underline">
                             Final Output
                           </a>
                         ) : null}
@@ -898,25 +1099,25 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
           <CardHeader className="flex-col items-start gap-1">
             <CardTitle>Videos</CardTitle>
-            <CardDescription>{project.videos.length === 0 ? 'No output videos yet.' : `${project.videos.length} videos generated.`}</CardDescription>
+            <CardDescription className="text-zinc-400">{project.videos.length === 0 ? 'No output videos yet.' : `${project.videos.length} videos generated.`}</CardDescription>
           </CardHeader>
           <CardContent>
             {project.videos.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+              <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-sm text-zinc-500">
                 Video generation is not wired yet in this phase.
               </div>
             ) : (
               <div className="space-y-3">
                 {project.videos.map((video) => (
-                  <div key={video.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{video.variantLabel || 'Generated video'}</div>
-                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <div key={video.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3">
+                    <div className="text-sm font-medium text-zinc-100">{video.variantLabel || 'Generated video'}</div>
+                    <div className="mt-1 text-xs text-zinc-500">
                       {video.durationSeconds}s • {formatBytes(video.fileSizeBytes)} • {new Date(video.createdAt).toLocaleString()}
                     </div>
-                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="mt-1 text-xs text-zinc-500">
                       Downloads: {video.downloadCount} • Expires {new Date(video.expiresAt).toLocaleDateString()}
                     </div>
                     <div className="mt-3 flex items-center gap-2">
@@ -927,7 +1128,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                         href={video.storageUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                        className="text-sm text-blue-300 hover:underline"
                       >
                         Open source file
                       </a>
@@ -939,15 +1140,15 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-zinc-800 bg-zinc-900/70 text-zinc-100">
           <CardHeader className="flex-col items-start gap-1">
             <CardTitle>Publish Queue</CardTitle>
-            <CardDescription>Save a publish draft or schedule a future post for a generated video.</CardDescription>
+            <CardDescription className="text-zinc-400">Save a publish draft or schedule a future post for a generated video.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4">
               <div className="grid gap-2">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Video</div>
+                <div className="text-sm font-medium text-zinc-100">Video</div>
                 <Select
                   value={draftPublish.videoId}
                   onValueChange={(value) => setDraftPublish((prev) => ({ ...prev, videoId: value }))}
@@ -965,7 +1166,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 </Select>
               </div>
               <div className="grid gap-2">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Post Title</div>
+                <div className="text-sm font-medium text-zinc-100">Post Title</div>
                 <Input
                   value={draftPublish.title}
                   onChange={(event) => setDraftPublish((prev) => ({ ...prev, title: event.target.value }))}
@@ -974,7 +1175,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 />
               </div>
               <div className="grid gap-2">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Description</div>
+                <div className="text-sm font-medium text-zinc-100">Description</div>
                 <Textarea
                   value={draftPublish.description}
                   onChange={(event) => setDraftPublish((prev) => ({ ...prev, description: event.target.value }))}
@@ -985,7 +1186,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Platform</div>
+                  <div className="text-sm font-medium text-zinc-100">Platform</div>
                   <Select
                     value={draftPublish.platform}
                     onValueChange={(value: 'tiktok' | 'instagram_reels' | 'youtube_shorts') =>
@@ -1003,7 +1204,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Channel</div>
+                  <div className="text-sm font-medium text-zinc-100">Channel</div>
                   <Select
                     value={draftPublish.channelId || '__none__'}
                     onValueChange={(value) => setDraftPublish((prev) => ({ ...prev, channelId: value === '__none__' ? '' : value }))}
@@ -1024,7 +1225,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Publish Time</div>
+                  <div className="text-sm font-medium text-zinc-100">Publish Time</div>
                   <Input
                     type="datetime-local"
                     value={draftPublish.publishAt}
@@ -1032,7 +1233,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Status</div>
+                  <div className="text-sm font-medium text-zinc-100">Status</div>
                   <Select
                     value={draftPublish.status}
                     onValueChange={(value: 'draft' | 'scheduled') => setDraftPublish((prev) => ({ ...prev, status: value }))}
@@ -1081,7 +1282,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
             </div>
             <div className="space-y-3">
               {(project.publishQueue ?? []).length === 0 ? (
-                <div className="rounded-lg border border-dashed border-gray-200 px-4 py-6 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-sm text-zinc-500">
                   No publish drafts yet.
                 </div>
               ) : (
@@ -1089,9 +1290,9 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                   const linkedVideo = project.videos.find((video) => video.id === item.videoId);
                   const linkedChannel = channels.find((channel) => channel.id === item.channelId);
                   return (
-                    <div key={item.id} className="rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-800">
+                    <div key={item.id} className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.title}</div>
+                        <div className="text-sm font-medium text-zinc-100">{item.title}</div>
                         <div className="flex items-center gap-2">
                           <Badge variant={publishBadgeVariant(item.status)}>{item.status}</Badge>
                           <Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={() => handleEditPublishItem(item)} aria-label="Edit publish task">
@@ -1102,45 +1303,50 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                           </Button>
                         </div>
                       </div>
-                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="mt-1 text-xs text-zinc-500">
                         {item.platform.replace(/_/g, ' ')} • {linkedVideo?.variantLabel || 'Generated video'} • {new Date(item.publishAt).toLocaleString()}
                       </div>
-                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="mt-1 text-xs text-zinc-500">
                         Channel: {linkedChannel ? `${linkedChannel.displayName}${linkedChannel.handle ? ` (${linkedChannel.handle})` : ''}` : 'Unassigned'}
                       </div>
                       {item.publishedAt ? (
-                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="mt-1 text-xs text-zinc-500">
                           Published at {new Date(item.publishedAt).toLocaleString()}
                         </div>
                       ) : null}
                       {item.lastAttemptAt ? (
-                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="mt-1 text-xs text-zinc-500">
                           Last attempt at {new Date(item.lastAttemptAt).toLocaleString()}
                         </div>
                       ) : null}
                       {item.providerPostId ? (
-                        <div className="mt-1 break-all text-xs text-gray-500 dark:text-gray-400">
+                        <div className="mt-1 break-all text-xs text-zinc-500">
                           Provider post ID: {item.providerPostId}
                         </div>
                       ) : null}
                       {item.publishedUrl ? (
-                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        <div className="mt-1 text-xs text-zinc-500">
                           Published link:{' '}
                           <a
                             href={item.publishedUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-blue-600 hover:underline dark:text-blue-400"
+                            className="text-blue-300 hover:underline"
                           >
                             Open post
                           </a>
                         </div>
                       ) : null}
+                      {item.platform === 'tiktok' && item.status === 'published' && !item.publishedUrl ? (
+                        <div className="mt-1 text-xs text-zinc-500">
+                          Uploaded to TikTok inbox. Open TikTok to finish editing and posting.
+                        </div>
+                      ) : null}
                       {item.errorMessage ? (
-                        <div className="mt-1 text-xs text-red-600 dark:text-red-400">{item.errorMessage}</div>
+                        <div className="mt-1 text-xs text-rose-300">{item.errorMessage}</div>
                       ) : null}
                       {item.description ? (
-                        <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">{item.description}</div>
+                        <div className="mt-2 text-sm text-zinc-300">{item.description}</div>
                       ) : null}
                       {item.status !== 'published' ? (
                         <div className="mt-3">
@@ -1164,6 +1370,8 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
       </div>
+      </>
+      ) : null}
     </div>
   );
 }
