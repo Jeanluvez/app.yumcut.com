@@ -6,7 +6,7 @@ import { Api } from '@/lib/api-client';
 import { StatusIcon } from '@/components/common/StatusIcon';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { PanelLeftOpen, PanelLeftClose, Folder, FolderOpen, Home, Plus, User, Video } from 'lucide-react';
+import { ChevronRight, PanelLeftOpen, PanelLeftClose, Folder, FolderOpen, Home, Plus, User, Video } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { usePathname } from 'next/navigation';
@@ -57,7 +57,8 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
     pathname?.startsWith('/create') ||
     pathname?.startsWith('/workspace') ||
     pathname?.startsWith('/project') ||
-    pathname?.startsWith('/assets');
+    pathname?.startsWith('/assets') ||
+    pathname?.startsWith('/account');
   const isAuthRoute =
     pathname?.startsWith('/sign-in') ||
     pathname?.startsWith('/sign-up') ||
@@ -255,7 +256,7 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
                     {open ? <span className="truncate text-sm font-medium">{displayName}</span> : null}
                   </button>
                 </PopoverTrigger>
-                <PopoverContent side="right" align="end" className="w-72 border-zinc-800 bg-zinc-950 p-0 text-zinc-100 shadow-2xl">
+                <PopoverContent side="right" align="end" className="w-72 rounded-2xl border border-zinc-800 bg-zinc-950 p-0 text-zinc-100 shadow-2xl">
                   <AccountMenuContent />
                 </PopoverContent>
               </Popover>
@@ -394,7 +395,7 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent side="right" align="end" className="w-72 p-0">
+            <PopoverContent side="right" align="end" className="w-72 rounded-2xl border border-zinc-800 bg-zinc-950 p-0 text-zinc-100 shadow-2xl">
               <AccountMenuContent />
             </PopoverContent>
           </Popover>

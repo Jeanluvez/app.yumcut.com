@@ -4,22 +4,14 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PopoverClose } from '@/components/ui/popover';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
-import { useTokenSummary } from '@/hooks/useTokenSummary';
-import { CONTACT_EMAIL } from '@/shared/constants/app';
-import { Activity, Loader2, LogOut, Mail, Shield, User } from 'lucide-react';
+import { Loader2, LogOut, Shield } from 'lucide-react';
 import { useAppLanguage } from '@/components/providers/AppLanguageProvider';
 import type { AppLanguageCode } from '@/shared/constants/app-language';
 import { useAuthActions, useSession } from '@/lib/auth-client';
 
 type AccountMenuCopy = {
   settings: string;
-  balance: string;
-  tokens: string;
   administrator: string;
-  account: string;
-  tokenActivity: string;
-  support: string;
   logOut: string;
   signOutTitle: string;
   signOutDescription: string;
@@ -30,12 +22,7 @@ type AccountMenuCopy = {
 const COPY: Record<AppLanguageCode, AccountMenuCopy> = {
   en: {
     settings: 'Settings',
-    balance: 'Balance:',
-    tokens: 'tokens',
     administrator: 'Administrator',
-    account: 'Account',
-    tokenActivity: 'Token activity',
-    support: 'Support',
     logOut: 'Log out',
     signOutTitle: 'Sign out',
     signOutDescription: 'Are you sure you want to log out?',
@@ -44,12 +31,7 @@ const COPY: Record<AppLanguageCode, AccountMenuCopy> = {
   },
   ru: {
     settings: 'Настройки',
-    balance: 'Баланс:',
-    tokens: 'токенов',
     administrator: 'Администратор',
-    account: 'Аккаунт',
-    tokenActivity: 'История токенов',
-    support: 'Поддержка',
     logOut: 'Выйти',
     signOutTitle: 'Выйти из аккаунта',
     signOutDescription: 'Вы уверены, что хотите выйти?',
@@ -64,18 +46,15 @@ export function AccountMenuContent() {
   const { data: session } = useSession();
   const { signOut } = useAuthActions();
   const isAdmin = !!(session?.user as any)?.isAdmin;
-  const { loading: tokensLoading, balance: tokenBalance } = useTokenSummary();
   const [signingOut, setSigningOut] = useState(false);
+  const name = session?.user?.name?.trim() || session?.user?.email?.split('@')[0] || 'Account';
+  const email = session?.user?.email || 'No email';
+  const avatarLetter = name.charAt(0).toUpperCase();
 
   return (
     <>
       <div className="border-b border-zinc-800 px-4 py-3">
         <div className="text-sm font-medium text-zinc-100">{t.settings}</div>
-        <div className="mt-2 text-xs text-zinc-500">
-          <span>{t.balance}</span>
-          <span className="ml-1 font-semibold text-zinc-100">{tokensLoading ? '—' : tokenBalance.toLocaleString()}</span>
-          <span className="ml-1">{t.tokens}</span>
-        </div>
       </div>
       <div className="p-2 space-y-1">
         {isAdmin ? (
@@ -89,36 +68,25 @@ export function AccountMenuContent() {
           </PopoverClose>
         ) : null}
         <PopoverClose asChild>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
-            <Link href="/account" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              <span>{t.account}</span>
+          <Button asChild variant="ghost" className="h-auto w-full justify-start rounded-xl px-3 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
+            <Link href="/account" className="flex w-full items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-zinc-800 text-xl font-semibold text-zinc-100">
+                {avatarLetter}
+              </div>
+              <div className="min-w-0 text-left">
+                <div className="truncate text-base font-medium leading-5 text-zinc-100">{name}</div>
+                <div className="truncate text-sm text-zinc-500">{email}</div>
+              </div>
             </Link>
-          </Button>
-        </PopoverClose>
-        <PopoverClose asChild>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
-            <Link href="/tokens/activity" className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              <span>{t.tokenActivity}</span>
-            </Link>
-          </Button>
-        </PopoverClose>
-        <PopoverClose asChild>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
-            <a href={`mailto:${CONTACT_EMAIL}`} className="flex items-center gap-2">
-              <Mail className="h-4 w-4" />
-              <span>{t.support}</span>
-            </a>
           </Button>
         </PopoverClose>
       </div>
-      <Separator />
-      <div>
+      <div className="mx-3 h-px bg-zinc-800/70" />
+      <div className="p-1.5">
         <Dialog>
           <DialogTrigger asChild>
-            <button className="flex w-full items-center gap-2 px-4 py-3 text-sm text-rose-300 transition hover:bg-zinc-800">
-              <LogOut className="h-4 w-4 text-rose-300" />
+            <button className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-zinc-100 transition hover:bg-zinc-800">
+              <LogOut className="h-4 w-4 text-zinc-100" />
               <span>{t.logOut}</span>
             </button>
           </DialogTrigger>

@@ -27,7 +27,8 @@ export function AppHeader() {
     pathname?.startsWith('/create') ||
     pathname?.startsWith('/workspace') ||
     pathname?.startsWith('/project') ||
-    pathname?.startsWith('/assets');
+    pathname?.startsWith('/assets') ||
+    pathname?.startsWith('/account');
   const brandHref = pathname === '/' ? '/' : '/workspace';
   const showBrand = !isCreateSurface || isPublicHome;
 
