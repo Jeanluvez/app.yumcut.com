@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -64,7 +64,7 @@ type AssetItem = {
   createdAt: string;
 };
 
-type SectionId = 'task-inputs' | 'assets';
+type SectionId = 'basic-info' | 'assets';
 
 function formatBytes(value: string) {
   const bytes = Number(value);
@@ -92,21 +92,31 @@ function formatLanguage(value: string) {
   return 'English';
 }
 
+const SECTION_ALIGNMENT_NUDGE = 6;
+
+function buildScriptPreview(script: AssetProjectDetail['scripts'][number]) {
+  return [script.hookText, script.bodyText, script.ctaText].filter(Boolean).join('\n\n');
+}
+
 function ReadonlyField({
   label,
   value,
   multiline = false,
+  compact = false,
 }: {
   label: string;
   value: string;
   multiline?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="grid gap-3">
-      <div className="text-sm font-medium text-zinc-100">{label}</div>
+    <div className="grid gap-2">
+      <div className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">{label}</div>
       <div
-        className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 px-4 py-4 text-zinc-300 ${
-          multiline ? 'min-h-[110px] whitespace-pre-line leading-7' : ''
+        className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 text-sm text-zinc-300 ${
+          compact ? 'px-3.5 py-2.5 leading-5' : 'px-4 py-3 leading-6'
+        } ${
+          multiline ? 'min-h-[92px] whitespace-pre-line' : ''
         }`}
       >
         {value || 'Not set'}
@@ -120,15 +130,72 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<SectionId>('task-inputs');
+  const [activeSection, setActiveSection] = useState<SectionId>('basic-info');
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const topBarRef = useRef<HTMLDivElement | null>(null);
+  const navCardRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const sectionRefs = useRef<Record<SectionId, HTMLDivElement | null>>({
+    'basic-info': null,
+    assets: null,
+  });
+
+  function getScrollContainer() {
+    if (scrollContainerRef.current) return scrollContainerRef.current;
+    const container = navCardRef.current?.closest('main') as HTMLElement | null;
+    scrollContainerRef.current = container;
+    return container;
+  }
+
+  function alignSectionToNav(section: SectionId, behavior: ScrollBehavior = 'smooth') {
+    const container = getScrollContainer();
+    const target = sectionRefs.current[section];
+    const navCard = navCardRef.current;
+    if (!container || !target || !navCard) return;
+
+    const topBarBottom = topBarRef.current?.getBoundingClientRect().bottom ?? 0;
+    const navTop = navCard.getBoundingClientRect().top;
+    const targetTop = target.getBoundingClientRect().top;
+    const safeNavTop = Math.max(navTop, topBarBottom + 20);
+    const nextScrollTop = container.scrollTop + (targetTop - safeNavTop) - SECTION_ALIGNMENT_NUDGE;
+
+    container.scrollTo({
+      top: Math.max(0, nextScrollTop),
+      behavior,
+    });
+  }
 
   function jumpToSection(section: SectionId) {
     setActiveSection(section);
-    if (typeof window === 'undefined') return;
-    const target = document.getElementById(section);
-    if (!target) return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    alignSectionToNav(section, 'smooth');
+    window.setTimeout(() => alignSectionToNav(section, 'auto'), 420);
+  }
+
+  function syncActiveSection() {
+    const navCard = navCardRef.current;
+    if (!navCard) return;
+
+    const topBarBottom = topBarRef.current?.getBoundingClientRect().bottom ?? 0;
+    const navTop = Math.max(navCard.getBoundingClientRect().top, topBarBottom + 16);
+    const sections = (Object.keys(sectionRefs.current) as SectionId[]).filter(
+      (section) => sectionRefs.current[section],
+    );
+    if (sections.length === 0) return;
+
+    let closestSection = sections[0];
+    let closestOffset = Number.POSITIVE_INFINITY;
+
+    sections.forEach((section) => {
+      const target = sectionRefs.current[section];
+      if (!target) return;
+      const offset = Math.abs(target.getBoundingClientRect().top - navTop);
+      if (offset < closestOffset) {
+        closestSection = section;
+        closestOffset = offset;
+      }
+    });
+
+    setActiveSection((current) => (current === closestSection ? current : closestSection));
   }
 
   async function loadData(signal?: { cancelled: boolean }) {
@@ -158,6 +225,19 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    scrollContainerRef.current = navCardRef.current?.closest('main') as HTMLElement | null;
+    syncActiveSection();
+    const container = getScrollContainer();
+    const handleScroll = () => syncActiveSection();
+    container?.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+    return () => {
+      container?.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [project, assets.length]);
+
   const selectedScripts = useMemo(
     () => (project?.scripts ?? []).filter((script) => script.isSelected),
     [project],
@@ -185,54 +265,58 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
 
   return (
     <>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="space-y-4 xl:sticky xl:top-12 xl:self-start">
-            <Button asChild variant="ghost" className="h-10 rounded-2xl px-3 text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100">
-              <Link href="/workspace/assets">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to My Assets
-              </Link>
-            </Button>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
+        <div
+          ref={topBarRef}
+          className="sticky top-0 z-20 -mx-4 flex items-center gap-3 border-b border-zinc-800/60 bg-transparent px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+        >
+          <Button asChild variant="ghost" size="icon" className="h-10 w-10 rounded-2xl text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100">
+            <Link href="/workspace/assets" aria-label="Back to My Assets">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <div className="min-w-0 text-xl font-semibold tracking-tight text-zinc-100">
+            <span className="block truncate">{project.title || project.name || project.productName || 'Asset Project'}</span>
+          </div>
+        </div>
 
-            <Card className="rounded-[28px] border-zinc-800 bg-zinc-900/70 text-zinc-100">
-              <CardHeader className="flex-col items-start gap-2">
-                <CardTitle className="text-2xl tracking-tight">
-                  {project.title || project.name || project.productName || 'Asset Project'}
-                </CardTitle>
-                <CardDescription className="text-zinc-400">
-                  Switch between the original task inputs and the uploaded asset library.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+        <div className="grid items-start gap-4 pt-0 xl:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="xl:sticky xl:top-[88px] xl:self-start">
+            <Card ref={navCardRef} className="rounded-[28px] border-zinc-800 bg-zinc-900/70 text-zinc-100">
+              <CardContent className="space-y-3 p-4">
                 {[
-                  { id: 'task-inputs' as const, label: 'Task Inputs', description: 'Review the create flow fields' },
-                  { id: 'assets' as const, label: 'Assets', description: 'Browse images, videos, and hook clips' },
+                  { id: 'basic-info' as const, label: 'Basic Info' },
+                  { id: 'assets' as const, label: 'Assets' },
                 ].map((section) => (
                   <button
                     key={section.id}
                     type="button"
                     onClick={() => jumpToSection(section.id)}
-                    className={`w-full rounded-2xl border px-5 py-4 text-left transition ${
+                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
                       activeSection === section.id
                         ? 'border-blue-500/50 bg-blue-500/10'
                         : 'border-zinc-800 bg-zinc-950/70 hover:border-zinc-700'
                     }`}
                   >
-                    <div className="text-lg font-medium text-zinc-100">{section.label}</div>
-                    <div className="mt-2 text-sm text-zinc-500">{section.description}</div>
+                    <div className="text-sm font-medium text-zinc-100">{section.label}</div>
                   </button>
                 ))}
               </CardContent>
             </Card>
           </div>
 
-          <div className="space-y-6">
-            <Card id="task-inputs" className="rounded-[28px] border-zinc-800 bg-zinc-900/70 text-zinc-100">
+          <div className="self-start space-y-6">
+            <div
+              id="basic-info"
+              ref={(node) => {
+                sectionRefs.current['basic-info'] = node;
+              }}
+            >
+              <Card className="rounded-[28px] border-zinc-800 bg-zinc-900/70 text-zinc-100">
                 <CardHeader className="flex-col items-start gap-2">
-                  <CardTitle>Task Inputs</CardTitle>
+                  <CardTitle>Basic Info</CardTitle>
                   <CardDescription className="text-zinc-400">
-                    The original fields captured from the first four create-task steps.
+                    Core product details that help describe and highlight what makes this product compelling.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
@@ -254,9 +338,9 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-500">Step 2 · Media Selection</div>
                       <div className="mt-3 grid gap-4 md:grid-cols-3">
-                        <ReadonlyField label="Selected Assets" value={String(project.selectedAssetIds.length)} />
-                        <ReadonlyField label="Hook Clip" value={project.hookAssetId ? 'Attached' : 'Not attached'} />
-                        <ReadonlyField label="Uploaded Files" value={String(project.counts.uploadedAssets ?? project.counts.assets)} />
+                        <ReadonlyField label="Selected Assets" value={String(project.selectedAssetIds.length)} compact />
+                        <ReadonlyField label="Hook Clip" value={project.hookAssetId ? 'Attached' : 'Not attached'} compact />
+                        <ReadonlyField label="Uploaded Files" value={String(project.counts.uploadedAssets ?? project.counts.assets)} compact />
                       </div>
                     </div>
 
@@ -280,17 +364,15 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
                           selectedScripts.map((script) => (
                             <div key={script.id} className="rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
                               <div className="flex items-center justify-between gap-3">
-                                <div className="text-lg font-medium text-zinc-100">
+                                <div className="text-base font-medium text-zinc-100">
                                   {script.styleLabel || `Script ${script.sortOrder}`}
                                 </div>
                                 <div className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300">
                                   Selected
                                 </div>
                               </div>
-                              <div className="mt-4 grid gap-4">
-                                <ReadonlyField label="Hook" value={script.hookText} multiline />
-                                <ReadonlyField label="Body" value={script.bodyText} multiline />
-                                <ReadonlyField label="CTA" value={script.ctaText} multiline />
+                              <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm leading-6 whitespace-pre-line text-zinc-300">
+                                {buildScriptPreview(script) || 'Not set'}
                               </div>
                             </div>
                           ))
@@ -300,12 +382,19 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
                   </div>
                 </CardContent>
               </Card>
+            </div>
 
-              <Card id="assets" className="rounded-[28px] border-zinc-800 bg-zinc-900/70 text-zinc-100">
+            <div
+              id="assets"
+              ref={(node) => {
+                sectionRefs.current.assets = node;
+              }}
+            >
+              <Card className="rounded-[28px] border-zinc-800 bg-zinc-900/70 text-zinc-100">
                 <CardHeader className="flex-col items-start gap-2">
                   <CardTitle>Assets</CardTitle>
                   <CardDescription className="text-zinc-400">
-                    Click any image or video to preview it in a larger lightbox and move left or right through the project assets.
+                    Visual product assets, including images and video materials used to shape the final creative output.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
@@ -367,12 +456,13 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
                   )}
                 </CardContent>
               </Card>
+            </div>
           </div>
         </div>
       </div>
 
       <Dialog open={previewIndex !== null} onOpenChange={(open) => !open && setPreviewIndex(null)}>
-        <DialogContent className="max-w-5xl border-zinc-800 bg-zinc-950 p-0 text-zinc-100">
+        <DialogContent className="top-1/2 z-50 w-[min(96vw,1100px)] max-w-5xl -translate-y-1/2 overflow-hidden rounded-[28px] border-zinc-800 bg-zinc-950 p-0 text-zinc-100 shadow-2xl">
           <DialogTitle className="sr-only">Asset Preview</DialogTitle>
           {previewAsset ? (
             <div className="relative">
@@ -393,18 +483,18 @@ export function AssetProjectDetailShell({ projectId }: { projectId: string }) {
                 <ChevronRight className="h-5 w-5" />
               </button>
 
-              <div className="flex min-h-[70vh] items-center justify-center bg-black p-10">
+              <div className="flex max-h-[78vh] min-h-[70vh] items-center justify-center bg-black p-6 sm:p-8">
                 {previewAsset.type === 'video' || previewAsset.type === 'hook' || previewAsset.mimeType.startsWith('video') ? (
                   <video
                     src={previewAsset.storageUrl}
                     controls
-                    className="max-h-[70vh] w-full rounded-2xl bg-black"
+                    className="max-h-[calc(78vh-4rem)] w-full rounded-2xl bg-black"
                   />
                 ) : (
                   <img
                     src={previewAsset.storageUrl}
                     alt={previewAsset.filename}
-                    className="max-h-[70vh] w-auto rounded-2xl object-contain"
+                    className="max-h-[calc(78vh-4rem)] w-auto max-w-full rounded-2xl object-contain"
                   />
                 )}
               </div>
