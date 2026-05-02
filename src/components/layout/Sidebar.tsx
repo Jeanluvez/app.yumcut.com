@@ -1,11 +1,12 @@
 "use client";
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { Api } from '@/lib/api-client';
 import { StatusIcon } from '@/components/common/StatusIcon';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { ChevronRight, PanelLeftOpen, PanelLeftClose, FolderOpen, Home, Image as ImageIcon, Plus, User, Video } from 'lucide-react';
+import { PanelLeftOpen, PanelLeftClose, FolderOpen, Home, Image as ImageIcon, Plus, User, Video } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { usePathname } from 'next/navigation';
@@ -146,6 +147,53 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
         )}
       >
         <div className="flex h-full flex-col">
+          <div className={cn('border-b border-zinc-800/60 px-2 py-2', open ? '' : 'flex justify-center')}>
+            {open ? (
+              <div className="flex items-center justify-between gap-2">
+                <Link href="/workspace" className="flex min-w-0 items-center gap-2.5 group px-2">
+                  <Image
+                    src="/logo-design.png"
+                    alt="Sprokl logo"
+                    width={26}
+                    height={26}
+                    className="h-6.5 w-6.5 object-contain"
+                    priority
+                  />
+                  <span className="truncate text-[15px] font-semibold tracking-tight text-zinc-100 transition-colors duration-150 group-hover:text-blue-300">
+                    Sprokl
+                  </span>
+                </Link>
+                <button
+                  onClick={() => update('sidebarOpen' as any, !open)}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-zinc-500 transition-all duration-150 hover:bg-zinc-800/60 hover:text-zinc-200"
+                  title={collapseLabel}
+                  aria-label={collapseLabel}
+                >
+                  <PanelLeftClose size={16} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => update('sidebarOpen' as any, !open)}
+                className="group relative inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150 hover:bg-zinc-800/60"
+                title={expandLabel}
+                aria-label={expandLabel}
+              >
+                <Image
+                  src="/logo-design.png"
+                  alt="Sprokl logo"
+                  width={22}
+                  height={22}
+                  className="h-5.5 w-5.5 object-contain transition-opacity duration-150 group-hover:opacity-0"
+                  priority
+                />
+                <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                  <PanelLeftOpen size={16} className="text-zinc-200" />
+                </span>
+              </button>
+            )}
+          </div>
+
           <div className="border-b border-zinc-800/60 p-2">
             <Link
               href="/create"
@@ -160,8 +208,8 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
             </Link>
           </div>
 
-          <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
-            {CREATE_SURFACE_NAV_ITEMS.map(({ id, label, href, icon: Icon, description, match }) => {
+          <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-6">
+            {CREATE_SURFACE_NAV_ITEMS.map(({ id, label, href, icon: Icon, match }) => {
               const active = match(pathname);
               return (
                 <a
@@ -212,17 +260,6 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
                 </PopoverContent>
               </Popover>
             ) : null}
-            <button
-              onClick={() => update('sidebarOpen' as any, !open)}
-              className={cn(
-                'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-zinc-600 transition-all duration-150 hover:bg-zinc-800/60 hover:text-zinc-300',
-                !open && 'justify-center',
-              )}
-              title={open ? collapseLabel : expandLabel}
-            >
-              {open ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
-              {open ? <span className="text-xs font-medium">Collapse</span> : null}
-            </button>
           </div>
         </div>
       </aside>

@@ -9,7 +9,6 @@ import { FolderOpen } from 'lucide-react';
 import { ProjectList } from '@/components/common/ProjectList';
 import { useProjects } from '@/components/providers/ProjectsProvider';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { HeaderAccountMenu } from '@/components/layout/HeaderAccountMenu';
 import { cn } from '@/lib/utils';
 import { useSession } from '@/lib/auth-client';
 
@@ -30,6 +29,7 @@ export function AppHeader() {
     pathname?.startsWith('/project') ||
     pathname?.startsWith('/assets');
   const brandHref = pathname === '/' ? '/' : '/workspace';
+  const showBrand = !isCreateSurface || isPublicHome;
 
   useEffect(() => {
     function handleProjectSelect() {
@@ -84,9 +84,11 @@ export function AppHeader() {
             </ScrollArea>
           </PopoverContent>
         </Popover>
-        <Link href={brandHref} className={cn('font-semibold tracking-tight', isCreateSurface ? 'text-zinc-100' : '')}>
-          {APP_NAME}
-        </Link>
+        {showBrand ? (
+          <Link href={brandHref} className={cn('font-semibold tracking-tight', isCreateSurface ? 'text-zinc-100' : '')}>
+            {APP_NAME}
+          </Link>
+        ) : null}
       </div>
       {isPublicHome ? (
         <div className="flex items-center gap-2">
@@ -103,11 +105,7 @@ export function AppHeader() {
             Start free
           </Link>
         </div>
-      ) : (
-        <div className="flex items-center gap-1">
-          <HeaderAccountMenu />
-        </div>
-      )}
+      ) : <div />}
     </header>
   );
 }
