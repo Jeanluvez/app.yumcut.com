@@ -6,7 +6,7 @@ import { Api } from '@/lib/api-client';
 import { StatusIcon } from '@/components/common/StatusIcon';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { PanelLeftOpen, PanelLeftClose, FolderOpen, Home, Image as ImageIcon, Plus, User, Video } from 'lucide-react';
+import { PanelLeftOpen, PanelLeftClose, Folder, FolderOpen, Home, Plus, User, Video } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { usePathname } from 'next/navigation';
@@ -38,7 +38,7 @@ const CREATE_SURFACE_NAV_ITEMS = [
     id: 'assets',
     label: 'My Assets',
     href: '/workspace/assets',
-    icon: ImageIcon,
+    icon: Folder,
     description: 'Product info and uploads',
     match: (pathname: string | null) => pathname?.startsWith('/workspace/assets') ?? false,
   },
