@@ -157,6 +157,20 @@ function getTimeUntilExpiry(expiresAt: string) {
   return `${days}d left`;
 }
 
+function formatProjectDate(value?: string | null) {
+  if (!value) return 'Pending';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Pending';
+  const month = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date);
+  const day = date.getDate();
+  const year = date.getFullYear();
+  let hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const period = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${month} ${day},${year},${hours}:${minutes}${period}`;
+}
+
 function toLocalDateTimeInputValue(value?: string | null) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return '';
@@ -222,6 +236,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     status: 'draft' as 'draft' | 'scheduled',
   });
   const [editingPublishId, setEditingPublishId] = useState<string | null>(null);
+  const [deletingProject, setDeletingProject] = useState(false);
 
   useEffect(() => {
     setDraftPublish((current) => {
@@ -587,28 +602,35 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
   const canMovePrev = activeVideoIndex > 0;
   const canMoveNext = activeVideoIndex < project.videos.length - 1;
 
+  async function handleDeleteProject() {
+    if (deletingProject) return;
+    const confirmed = typeof window === 'undefined'
+      ? true
+      : window.confirm('Delete this project? This action cannot be undone.');
+    if (!confirmed) return;
+
+    setDeletingProject(true);
+    try {
+      await Api.deleteProject(project.id);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('project:deleted', { detail: { projectId: project.id } }));
+      }
+      toast.success('Project deleted');
+      router.push('/workspace/projects');
+    } catch (err: any) {
+      toast.error(err?.error?.message || 'Could not delete the project. Please try again.');
+      setDeletingProject(false);
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-3">
-          <Button asChild variant="ghost" className="h-10 rounded-2xl px-3 text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100">
-            <Link href="/workspace/projects">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Projects
-            </Link>
-          </Button>
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-100">{project.title}</h1>
-              <Badge variant={statusVariant(project.status)}>{project.status}</Badge>
-            </div>
-            <p className="max-w-3xl text-sm leading-6 text-zinc-400">
-              Review generated variants, download outputs, and adjust the underlying project settings from one place.
-            </p>
-          </div>
-        </div>
-        <Button asChild className="rounded-2xl bg-white text-zinc-950 hover:bg-zinc-200">
-          <Link href="/workspace/projects">Back to List</Link>
+      <div className="flex items-center">
+        <Button asChild variant="ghost" className="h-10 max-w-full rounded-2xl px-3 text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100">
+          <Link href="/workspace/projects" className="min-w-0">
+            <ArrowLeft className="mr-2 h-4 w-4 shrink-0" />
+            <span className="truncate">{project.title}</span>
+          </Link>
         </Button>
       </div>
 
@@ -642,7 +664,17 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
 
               {activeVideo ? (
                 <div className="relative aspect-[9/16] w-full max-w-[360px] overflow-hidden rounded-[28px] border border-zinc-700 bg-black shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
-                  {activeVideo.thumbnailUrl ? (
+                  {activeVideo.storageUrl ? (
+                    <video
+                      key={activeVideo.id}
+                      src={activeVideo.storageUrl}
+                      poster={activeVideo.thumbnailUrl || undefined}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="h-full w-full bg-black object-contain"
+                    />
+                  ) : activeVideo.thumbnailUrl ? (
                     <img
                       src={activeVideo.thumbnailUrl}
                       alt={activeVideo.variantLabel || 'Video variant preview'}
@@ -658,7 +690,7 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                       </div>
                     </div>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-4">
                     <div className="text-sm font-medium text-zinc-100">
                       {activeVideo.variantLabel || `Variant ${activeVideoIndex + 1}`}
                     </div>
@@ -677,54 +709,54 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
               )}
             </div>
 
-            {project.videos.length > 1 ? (
-              <div className="border-t border-zinc-800 px-4 py-4">
-                <div className="flex gap-3 overflow-x-auto pb-1">
-                  {project.videos.map((video, index) => (
-                    <button
-                      key={video.id}
-                      type="button"
-                      onClick={() => setActiveVideoIndex(index)}
-                      className={`min-w-[120px] overflow-hidden rounded-2xl border text-left transition ${
-                        index === activeVideoIndex
-                          ? 'border-blue-400/50 bg-blue-500/10'
-                          : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
-                      }`}
-                    >
-                      <div className="flex h-20 items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900">
-                        <Film className="h-5 w-5 text-zinc-300" />
-                      </div>
-                      <div className="space-y-1 p-3">
-                        <div className="truncate text-xs font-medium text-zinc-100">
-                          {video.variantLabel || `Variant ${index + 1}`}
-                        </div>
-                        <div className="text-[11px] text-zinc-500">{formatDurationShort(video.durationSeconds)}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
 
         <Card className="rounded-[32px] border-zinc-800 bg-zinc-900/75 text-zinc-100">
           <CardContent className="space-y-6 p-6">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button
+                asChild
+                variant="outline"
+                className="h-11 rounded-2xl border-zinc-700 bg-zinc-950 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-900"
+              >
+                <a href={activeVideo ? `/api/videos/${activeVideo.id}/download` : '#'} aria-disabled={!activeVideo}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </a>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-2xl border-zinc-700 bg-zinc-950 text-zinc-100 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-100"
+                onClick={() => void handleDeleteProject()}
+                disabled={deletingProject}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {deletingProject ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+
             <Button
-              asChild
+              type="button"
               variant="outline"
-              className="h-auto w-full justify-start rounded-3xl border-zinc-700 bg-zinc-950 px-5 py-4 text-left text-zinc-100 hover:border-zinc-600 hover:bg-zinc-900"
+              className="h-auto w-full rounded-3xl border-zinc-700 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 px-5 py-4 text-left text-zinc-100 hover:border-violet-400/30 hover:bg-zinc-900"
             >
-              <a href={activeVideo ? `/api/videos/${activeVideo.id}/download` : '#'} aria-disabled={!activeVideo}>
-                <Download className="mr-3 h-5 w-5" />
-                <span className="text-base font-semibold">Download</span>
-              </a>
+              <div className="flex w-full items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-zinc-100">Remove watermark</div>
+                  <div className="mt-1 text-xs text-zinc-400">Upgrade to get clean exports</div>
+                </div>
+                <span className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-200">
+                  Upgrade
+                </span>
+              </div>
             </Button>
 
             <div className="space-y-4 rounded-3xl border border-zinc-800 bg-zinc-950/80 p-5">
               <div>
                 <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">Variant Info</div>
-                <div className="mt-2 text-xl font-semibold text-zinc-100">
+                <div className="mt-2 text-sm font-medium text-zinc-100">
                   {activeVideo?.variantLabel || `Variant ${activeVideoIndex + 1}`}
                 </div>
               </div>
@@ -733,17 +765,13 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-zinc-500">Created</span>
                   <span className="text-zinc-100">
-                    {activeVideo ? new Date(activeVideo.createdAt).toLocaleString() : 'Pending'}
+                    {formatProjectDate(activeVideo?.createdAt)}
                   </span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-zinc-500">Status</span>
-                  <span className="text-zinc-100">{project.status}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-zinc-500">Expires</span>
                   <span className={activeExpiryLabel === 'Expired' ? 'text-rose-300' : 'text-zinc-100'}>
-                    {activeExpiryLabel || 'Pending'}
+                    {activeVideo ? formatProjectDate(activeVideo.expiresAt) : 'Pending'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
