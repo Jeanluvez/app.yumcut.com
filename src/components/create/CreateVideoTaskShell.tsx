@@ -6,12 +6,9 @@ import { useRouter } from 'next/navigation';
 import {
   Check,
   Clock3,
-  Clapperboard,
   Edit3,
-  FileText,
   FolderOpen,
   Globe2,
-  ImagePlus,
   Image as ImageIcon,
   Loader2,
   Monitor,
@@ -19,7 +16,6 @@ import {
   RefreshCw,
   RotateCcw,
   Square,
-  SlidersHorizontal,
   Smartphone,
   Sparkles,
   Upload,
@@ -64,6 +60,10 @@ type ProductBriefDraft = {
   sellingPoints: string;
   targetAudience: string;
   productUrl: string;
+  promotionalPricingEnabled: boolean;
+  originalPrice: string;
+  salePrice: string;
+  promoDescription: string;
 };
 
 type SettingsDraft = {
@@ -89,32 +89,22 @@ const STEPS = [
   {
     id: 1 as StepId,
     label: 'Media',
-    description: 'Select the source media and hook footage.',
-    icon: ImagePlus,
   },
   {
     id: 2 as StepId,
-    label: 'Product Brief',
-    description: 'Define the ad concept or paste the script.',
-    icon: FileText,
+    label: 'Product Details',
   },
   {
     id: 3 as StepId,
-    label: 'Settings',
-    description: 'Tune duration, language, character, and mode.',
-    icon: SlidersHorizontal,
+    label: 'Video Settings',
   },
   {
     id: 4 as StepId,
     label: 'Scripts',
-    description: 'Generate and refine the script variants.',
-    icon: Sparkles,
   },
   {
     id: 5 as StepId,
-    label: 'Review & Create',
-    description: 'Review the task and continue to project creation.',
-    icon: Clapperboard,
+    label: 'Review & Render',
   },
 ] as const;
 
@@ -191,6 +181,9 @@ function buildDraftText(productBrief: ProductBriefDraft, scripts: ScriptDraft[],
     productBrief.sellingPoints ? `Selling points: ${productBrief.sellingPoints}` : null,
     productBrief.targetAudience ? `Audience: ${productBrief.targetAudience}` : null,
     productBrief.productUrl ? `Product URL: ${productBrief.productUrl}` : null,
+    productBrief.promotionalPricingEnabled && productBrief.originalPrice ? `Original price: ${productBrief.originalPrice}` : null,
+    productBrief.promotionalPricingEnabled && productBrief.salePrice ? `Sale price: ${productBrief.salePrice}` : null,
+    productBrief.promotionalPricingEnabled && productBrief.promoDescription ? `Promo note: ${productBrief.promoDescription}` : null,
     scriptStyles ? `Preferred script styles: ${scriptStyles}` : null,
   ].filter(Boolean);
 
@@ -215,28 +208,18 @@ function WizardProgress({
   const progressPct = ((currentStep - 1) / (STEPS.length - 1)) * 100;
 
   return (
-    <div className="rounded-[28px] border border-white/8 bg-black/20 px-4 py-5 sm:px-6">
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200/80">Create Video Task</p>
-          <h2 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">
-            Step {currentStep} of {STEPS.length}
-          </h2>
-        </div>
-        <p className="max-w-xs text-right text-xs leading-5 text-zinc-500 sm:text-sm">
-          Click any step to switch the editing surface below, matching your preferred wizard flow.
-        </p>
-      </div>
+    <div className="rounded-[28px] border border-white/8 bg-black/20 px-4 py-4 sm:px-6">
+      <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200/80">Create Video Task</div>
 
-      <div className="relative mb-5 h-1 rounded-full bg-zinc-800">
+      <div className="relative mb-4 h-px bg-zinc-800">
         <div
-          className="gradient-primary absolute left-0 top-0 h-full rounded-full transition-all duration-300"
+          className="gradient-primary absolute left-0 top-0 h-full transition-all duration-300"
           style={{ width: `${progressPct}%` }}
         />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-5">
-        {STEPS.map(({ id, label, icon: Icon }) => {
+        {STEPS.map(({ id, label }) => {
           const isActive = currentStep === id;
           const isCompleted = id < currentStep;
 
@@ -245,35 +228,25 @@ function WizardProgress({
               key={id}
               type="button"
               onClick={() => onSelect(id)}
-              className={[
-                'rounded-2xl border px-3 py-3 text-left transition-all duration-200',
-                isActive
-                  ? 'border-blue-400/40 bg-blue-500/10 shadow-[0_0_0_1px_rgba(96,165,250,0.18)]'
-                  : isCompleted
-                    ? 'border-zinc-700 bg-zinc-900/90 hover:border-zinc-600'
-                    : 'border-zinc-800 bg-zinc-950/70 hover:border-zinc-700',
-              ].join(' ')}
+              className="rounded-2xl px-2 py-2 text-left transition-all duration-200"
             >
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col items-center gap-3 text-center">
                 <div
                   className={[
-                    'flex h-10 w-10 items-center justify-center rounded-2xl border',
+                    'flex h-8 w-8 items-center justify-center rounded-full border text-sm font-semibold',
                     isActive
-                      ? 'border-blue-400/30 bg-blue-500/15 text-blue-200'
+                      ? 'border-violet-400/50 bg-violet-500/15 text-violet-200'
                       : isCompleted
-                        ? 'border-zinc-700 bg-zinc-800 text-zinc-100'
-                        : 'border-zinc-800 bg-zinc-900 text-zinc-500',
+                        ? 'border-zinc-600 bg-zinc-800 text-zinc-100'
+                        : 'border-zinc-700 bg-zinc-900 text-zinc-500',
                   ].join(' ')}
                 >
-                  {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                  {id}
                 </div>
-                <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
-                  0{id}
-                </span>
+                <p className={['text-xs font-medium leading-5', isActive ? 'text-white' : 'text-zinc-500'].join(' ')}>
+                  {label}
+                </p>
               </div>
-              <p className={['mt-4 text-sm font-semibold', isActive ? 'text-white' : 'text-zinc-200'].join(' ')}>
-                {label}
-              </p>
             </button>
           );
         })}
@@ -284,21 +257,23 @@ function WizardProgress({
 
 function StepPanel({
   eyebrow,
-  title,
   description,
+  headerActions,
   children,
 }: {
   eyebrow: string;
-  title: string;
   description: string;
+  headerActions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="rounded-[28px] border border-white/8 bg-zinc-950/75 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.38)] sm:p-6">
-      <div className="mb-6">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200/80">{eyebrow}</p>
-        <h3 className="mt-2 text-2xl font-semibold tracking-tight text-white">{title}</h3>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">{description}</p>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <p className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-200/80">{eyebrow}</p>
+          <p className="text-[11px] font-semibold text-zinc-500">{description}</p>
+        </div>
+        {headerActions ? <div className="shrink-0">{headerActions}</div> : null}
       </div>
       {children}
     </div>
@@ -307,16 +282,19 @@ function StepPanel({
 
 function MediaStep({
   selectedIds,
+  localUploads,
   onChangeSelectedIds,
+  onChangeLocalUploads,
   onNext,
 }: {
   selectedIds: string[];
+  localUploads: LocalUploadItem[];
   onChangeSelectedIds: (next: string[]) => void;
+  onChangeLocalUploads: (next: LocalUploadItem[]) => void;
   onNext: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'library' | 'upload'>('library');
+  const [activeTab, setActiveTab] = useState<'library' | 'upload'>('upload');
   const [assets, setAssets] = useState<AssetItem[]>([]);
-  const [localUploads, setLocalUploads] = useState<LocalUploadItem[]>([]);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -349,8 +327,6 @@ function MediaStep({
   }, []);
 
   const libraryAssets = assets.filter((item) => item.type !== 'hook').slice(0, 9);
-  const hookAssets = assets.filter((item) => item.type === 'hook').slice(0, 3);
-
   function toggleAsset(id: string) {
     onChangeSelectedIds(selectedIds.includes(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id]);
   }
@@ -365,48 +341,50 @@ function MediaStep({
       kind: file.type.startsWith('video') ? 'video' : 'image',
     } as LocalUploadItem));
 
-    setLocalUploads((prev) => [...prev, ...nextFiles]);
+    onChangeLocalUploads([...localUploads, ...nextFiles]);
   }
 
   return (
     <StepPanel
       eyebrow="Step 01"
-      title="Choose the media that anchors this ad"
-      description="This step now follows the asset-first structure from your frontend reference. It reuses the current Sprokl asset library and keeps creation flow changes limited to the homepage wizard."
+      description="Choose the media files that will be used in this video."
     >
       <div className="space-y-5">
-        <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
-          <button
-            type="button"
-            onClick={() => setActiveTab('library')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-              activeTab === 'library' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <FolderOpen className="h-4 w-4" />
-            My Library ({assets.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('upload')}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-              activeTab === 'upload' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
-            }`}
-          >
-            <Upload className="h-4 w-4" />
-            Upload New
-          </button>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex w-fit items-center rounded-xl border border-zinc-800 bg-zinc-900 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('upload')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                activeTab === 'upload' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Upload className="h-4 w-4" />
+              Upload New
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('library')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                activeTab === 'library' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <FolderOpen className="h-4 w-4" />
+              My Assets ({assets.length})
+            </button>
+          </div>
+          <div className="hidden items-center gap-4 text-xs sm:flex">
+            <span className="text-zinc-500">
+              <span className="font-semibold text-blue-300">{localUploads.length}</span> uploaded
+            </span>
+            <span className="text-zinc-500">
+              <span className="font-semibold text-blue-300">{selectedIds.length}</span> selected
+            </span>
+          </div>
         </div>
 
         {activeTab === 'library' ? (
           <div className="space-y-5">
-            {selectedIds.length > 0 ? (
-              <div className="flex items-center gap-2 text-xs text-blue-300 font-medium bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
-                <Check className="h-3.5 w-3.5" />
-                {selectedIds.length} assets selected for this draft flow
-              </div>
-            ) : null}
-
             {loading ? (
               <div className="flex min-h-[220px] items-center justify-center rounded-3xl border border-zinc-800 bg-zinc-900/60">
                 <div className="flex items-center gap-2 text-sm text-zinc-400">
@@ -481,65 +459,19 @@ function MediaStep({
               </div>
             )}
 
-            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 text-blue-200">
-                    <FolderOpen className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-base font-semibold text-white">Use existing assets</p>
-                    <p className="mt-1 text-sm leading-6 text-zinc-400">
-                      The homepage now starts from your real asset library instead of a duplicate local step block.
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Link
-                    href="/workspace/assets"
-                    className="rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-2.5 text-sm font-medium text-blue-100 transition hover:bg-blue-500/15"
-                  >
-                    Manage library
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={onNext}
-                    className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
-                  >
-                    Continue to Product Brief
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-violet-400/20 bg-violet-500/10 text-violet-200">
-                      <PlayCircle className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white">Hook clip</p>
-                      <p className="mt-1 text-xs leading-5 text-zinc-500">
-                        {hookAssets.length > 0
-                          ? `${hookAssets.length} hook clips already exist in your library.`
-                          : 'Keep a short opener ready for the first few seconds of the ad.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-                  <p className="text-sm font-semibold text-white">Migration note</p>
-                  <p className="mt-2 text-sm leading-6 text-zinc-400">
-                    Upload and final asset assignment still use the working project and workspace modules in this phase.
-                  </p>
-                </div>
-              </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onNext}
+                className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Continue to Product Details
+              </button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-3xl border-2 border-dashed border-zinc-700 bg-zinc-900/60 p-10 text-center">
+            <div className="rounded-3xl border-2 border-dashed border-zinc-700 bg-zinc-900/60 p-8 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-400">
                 <Upload className="h-5 w-5" />
               </div>
@@ -556,7 +488,7 @@ function MediaStep({
               />
               <p className="mt-4 text-sm font-semibold text-zinc-200">Upload new media from your local device</p>
               <p className="mt-2 text-sm leading-6 text-zinc-500">
-                Choose local video clips or product images first. This phase keeps the files in the homepage draft surface and does not change the backend project pipeline yet.
+                Choose local video clips or product images first.
               </p>
               <button
                 type="button"
@@ -583,7 +515,7 @@ function MediaStep({
                     </div>
                     <button
                       type="button"
-                      onClick={() => setLocalUploads((prev) => prev.filter((item) => item.id !== file.id))}
+                      onClick={() => onChangeLocalUploads(localUploads.filter((item) => item.id !== file.id))}
                       className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800"
                     >
                       Remove
@@ -594,20 +526,15 @@ function MediaStep({
             ) : null}
 
             <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab('library')}
-                className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
-              >
-                Back to Library
-              </button>
-              <button
-                type="button"
-                onClick={onNext}
-                className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-              >
-                Continue to Product Brief
-              </button>
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={onNext}
+                  className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                >
+                  Continue to Product Details
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -619,20 +546,23 @@ function MediaStep({
 function ProductBriefStep({
   draft,
   onChange,
+  onBack,
+  onNext,
 }: {
   draft: ProductBriefDraft;
   onChange: (next: ProductBriefDraft) => void;
+  onBack: () => void;
+  onNext: () => void;
 }) {
   return (
     <div className="space-y-6">
-      <StepPanel
-        eyebrow="Step 02"
-        title="Shape the product brief before generating"
-        description="This step now follows the structured product-info layout from your frontend reference. The duplicate legacy text composer has been removed from this stage."
-      >
+    <StepPanel
+      eyebrow="Step 02"
+      description="Add the core product details needed to generate scripts."
+    >
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Product name</span>
+            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Product name *</span>
             <input
               value={draft.productName}
               onChange={(event) => onChange({ ...draft, productName: event.target.value })}
@@ -641,7 +571,7 @@ function ProductBriefStep({
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Target audience</span>
+            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Target audience *</span>
             <input
               value={draft.targetAudience}
               onChange={(event) => onChange({ ...draft, targetAudience: event.target.value })}
@@ -650,7 +580,7 @@ function ProductBriefStep({
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Product description</span>
+            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Product description *</span>
             <textarea
               value={draft.productDescription}
               onChange={(event) => onChange({ ...draft, productDescription: event.target.value })}
@@ -660,7 +590,7 @@ function ProductBriefStep({
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Key selling points</span>
+            <span className="mb-1.5 block text-sm font-medium text-zinc-300">Key selling points *</span>
             <textarea
               value={draft.sellingPoints}
               onChange={(event) => onChange({ ...draft, sellingPoints: event.target.value })}
@@ -679,12 +609,82 @@ function ProductBriefStep({
             />
           </label>
         </div>
-        <div className="mt-6 rounded-3xl border border-zinc-800 bg-zinc-900/70 p-5">
-          <p className="text-sm font-semibold text-white">What happens next</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
-            Continue through Settings, Scripts, and Render from the top wizard. This phase keeps the new structured brief surface separate from the old create composer.
-          </p>
+
+        <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/80">
+          <div className="flex items-center justify-between gap-4 px-5 py-4">
+            <div className="flex items-center gap-3">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${draft.promotionalPricingEnabled ? 'bg-pink-500/15 text-pink-300' : 'bg-zinc-800 text-zinc-500'}`}>
+                %
+              </div>
+              <div>
+                <div className="text-base font-medium text-zinc-100">Promotional pricing</div>
+                <div className="mt-1 text-sm text-zinc-500">Add sale price and discount info to the script</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange({ ...draft, promotionalPricingEnabled: !draft.promotionalPricingEnabled })}
+              className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition ${draft.promotionalPricingEnabled ? 'bg-violet-500' : 'bg-zinc-700'}`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${draft.promotionalPricingEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+              />
+            </button>
+          </div>
+
+          {draft.promotionalPricingEnabled ? (
+            <div className="border-t border-zinc-800 px-5 py-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-zinc-300">Original price</span>
+                  <input
+                    value={draft.originalPrice}
+                    onChange={(event) => onChange({ ...draft, originalPrice: event.target.value })}
+                    placeholder="$ 49.99"
+                    className="w-full rounded-2xl border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition focus:border-blue-400/40"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium text-zinc-300">Sale price</span>
+                  <input
+                    value={draft.salePrice}
+                    onChange={(event) => onChange({ ...draft, salePrice: event.target.value })}
+                    placeholder="$ 29.99"
+                    className="w-full rounded-2xl border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition focus:border-blue-400/40"
+                  />
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium text-zinc-300">Promo description (optional)</span>
+                  <input
+                    value={draft.promoDescription}
+                    onChange={(event) => onChange({ ...draft, promoDescription: event.target.value })}
+                    placeholder="e.g. Flash sale ends Sunday · Use code GLOW20 at checkout"
+                    className="w-full rounded-2xl border border-zinc-700 bg-zinc-900/80 px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none transition focus:border-blue-400/40"
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
         </div>
+
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
+          >
+            Back to Media
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            Continue to Video Settings
+          </button>
+        </div>
+      </div>
       </StepPanel>
     </div>
   );
@@ -704,8 +704,7 @@ function SettingsStep({
   return (
     <StepPanel
       eyebrow="Step 03"
-      title="Tune generation settings"
-      description="This step now behaves like a real settings editor instead of a placeholder card. It follows the structure of your frontend settings step while staying local to the homepage wizard for now."
+      description="Choose the video settings for this render."
     >
       <div className="space-y-5">
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
@@ -719,15 +718,22 @@ function SettingsStep({
                 key={value}
                 type="button"
                 onClick={() => onChange({ ...draft, aspectRatio: value })}
-                className={`rounded-2xl border p-4 text-center transition ${
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
                   draft.aspectRatio === value
                     ? 'border-blue-400/40 bg-blue-500/10 text-white'
                     : 'border-zinc-700 bg-zinc-950/60 text-zinc-300 hover:border-zinc-600'
                 }`}
               >
-                <Icon className={`mx-auto h-5 w-5 ${draft.aspectRatio === value ? 'text-blue-200' : 'text-zinc-500'}`} />
-                <p className="mt-3 text-sm font-semibold">{label}</p>
-                <p className="mt-1 text-xs text-zinc-500">{desc}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Icon className={`h-5 w-5 ${draft.aspectRatio === value ? 'text-blue-200' : 'text-zinc-500'}`} />
+                    <div>
+                      <p className="text-sm font-semibold">{label}</p>
+                      <p className="mt-0.5 text-xs text-zinc-500">{desc}</p>
+                    </div>
+                  </div>
+                  {draft.aspectRatio === value ? <Check className="h-4 w-4 text-blue-200" /> : null}
+                </div>
               </button>
             ))}
           </div>
@@ -744,14 +750,19 @@ function SettingsStep({
                 key={value}
                 type="button"
                 onClick={() => onChange({ ...draft, duration: value })}
-                className={`rounded-2xl border p-4 text-center transition ${
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
                   draft.duration === value
                     ? 'border-blue-400/40 bg-blue-500/10 text-white'
                     : 'border-zinc-700 bg-zinc-950/60 text-zinc-300 hover:border-zinc-600'
                 }`}
               >
-                <p className="text-2xl font-semibold">{label}</p>
-                <p className="mt-1 text-xs text-zinc-500">{desc}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{label}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500">{desc}</p>
+                  </div>
+                  {draft.duration === value ? <Check className="h-4 w-4 text-blue-200" /> : null}
+                </div>
               </button>
             ))}
           </div>
@@ -769,7 +780,7 @@ function SettingsStep({
                   key={value}
                   type="button"
                   onClick={() => onChange({ ...draft, language: value })}
-                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-2.5 text-left transition ${
                     draft.language === value
                       ? 'border-blue-400/40 bg-blue-500/10'
                       : 'border-zinc-700 bg-zinc-950/60 hover:border-zinc-600'
@@ -796,7 +807,7 @@ function SettingsStep({
                   key={value}
                   type="button"
                   onClick={() => onChange({ ...draft, voice: value })}
-                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-2.5 text-left transition ${
                     draft.voice === value
                       ? 'border-blue-400/40 bg-blue-500/10'
                       : 'border-zinc-700 bg-zinc-950/60 hover:border-zinc-600'
@@ -824,7 +835,7 @@ function SettingsStep({
                 key={value}
                 type="button"
                 onClick={() => onChange({ ...draft, music: value })}
-                className={`rounded-2xl border px-4 py-4 text-left transition ${
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
                   draft.music === value
                     ? 'border-blue-400/40 bg-blue-500/10'
                     : 'border-zinc-700 bg-zinc-950/60 hover:border-zinc-600'
@@ -843,20 +854,22 @@ function SettingsStep({
         </div>
       </div>
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
-        >
-          Back to Product Brief
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          Continue to Scripts
-        </button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
+          >
+            Back to Product Details
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            Continue to Scripts
+          </button>
+        </div>
       </div>
     </StepPanel>
   );
@@ -946,16 +959,8 @@ function ScriptsStep({
   return (
     <StepPanel
       eyebrow="Step 04"
-      title="Review and refine generated scripts"
-      description="This step now follows the script-card workflow from your frontend reference. It supports multiple script variants, selection for rendering, and inline editing before the final step."
-    >
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-white">Generated variants</p>
-          <p className="mt-1 text-sm leading-6 text-zinc-400">
-            Choose which scripts should move forward into rendering. Edit any variant inline before continuing.
-          </p>
-        </div>
+      description="Choose and refine the script variants you want to render."
+      headerActions={
         <button
           type="button"
           onClick={handleRegenerate}
@@ -967,8 +972,8 @@ function ScriptsStep({
             Regenerate
           </span>
         </button>
-      </div>
-
+      }
+    >
       {isGenerating ? (
         <div className="space-y-4">
           {[1, 2, 3].map((item) => (
@@ -1122,20 +1127,22 @@ function ScriptsStep({
       ) : null}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
-        >
-          Back to Settings
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          Continue to Render
-        </button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
+          >
+            Back to Settings
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            Continue to Review
+          </button>
+        </div>
       </div>
     </StepPanel>
   );
@@ -1146,6 +1153,7 @@ function RenderStep({
   settings,
   scripts,
   selectedIds,
+  selectedAssetCount,
   submitting,
   onCreate,
   onBack,
@@ -1154,66 +1162,153 @@ function RenderStep({
   settings: SettingsDraft;
   scripts: ScriptDraft[];
   selectedIds: string[];
+  selectedAssetCount: number;
   submitting: boolean;
   onCreate: () => void;
   onBack: () => void;
 }) {
   const selectedScripts = scripts.filter((item) => selectedIds.includes(item.id));
+  const selectedLanguage = LANGUAGES.find((item) => item.value === settings.language);
+  const selectedVoice = VOICES.find((item) => item.value === settings.voice);
+  const selectedMusic = MUSIC_OPTIONS.find((item) => item.value === settings.music);
 
   return (
     <StepPanel
       eyebrow="Step 05"
-      title="Review the task before project creation"
-      description="This step now acts as a lightweight review and submit stage. It summarizes the homepage wizard state, then hands off to the existing confirmation flow without changing the backend pipeline."
+      description="Review the details before starting rendering."
     >
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Brief</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
-            {productBrief.productName || 'Unnamed product'}
-            <br />
-            <span className="text-zinc-500">{productBrief.targetAudience || 'No audience added yet'}</span>
-          </p>
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            <span className="text-violet-300">◌</span>
+            <span>Product</span>
+          </div>
+          <div className="mt-4 text-2xl font-medium tracking-tight text-zinc-100">
+            {productBrief.productName || 'Untitled product'}
+          </div>
+          <div className="mt-3 text-sm leading-7 text-zinc-500">
+            {productBrief.productDescription || 'No product description added yet.'}
+          </div>
+          {productBrief.promotionalPricingEnabled ? (
+            <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/80 px-4 py-3">
+              <div className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">Promotional Pricing</div>
+              <div className="mt-2 text-sm text-zinc-100">
+                {productBrief.originalPrice ? `Original ${productBrief.originalPrice}` : 'Original price not set'}
+                {' -> '}
+                {productBrief.salePrice ? `Sale ${productBrief.salePrice}` : 'Sale price not set'}
+              </div>
+              {productBrief.promoDescription ? (
+                <div className="mt-2 text-sm text-zinc-500">{productBrief.promoDescription}</div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
+
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Settings</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
-            {settings.aspectRatio} • {settings.duration}s • {settings.language.toUpperCase()}
-            <br />
-            <span className="text-zinc-500">{settings.voice} / {settings.music}</span>
-          </p>
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            <span className="text-violet-300">◌</span>
+            <span>Video Settings</span>
+          </div>
+          <div className="mt-4 space-y-2.5 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-zinc-500">Format</span>
+              <span className="font-medium text-zinc-100">{settings.aspectRatio}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-zinc-500">Duration</span>
+              <span className="font-medium text-zinc-100">{settings.duration}s</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-zinc-500">Language</span>
+              <span className="font-medium text-zinc-100">{selectedLanguage?.label || settings.language.toUpperCase()}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-zinc-500">Voice</span>
+              <span className="font-medium text-zinc-100">{selectedVoice?.label || settings.voice}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-zinc-500">Music</span>
+              <span className="font-medium text-zinc-100">{selectedMusic?.label || settings.music}</span>
+            </div>
+          </div>
         </div>
+
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
-          <p className="text-sm font-semibold text-white">Scripts</p>
-          <p className="mt-2 text-sm leading-6 text-zinc-400">
-            {selectedScripts.length} selected for render
-            <br />
-            <span className="text-zinc-500">{selectedScripts.map((item) => item.style).join(', ') || 'No scripts selected yet'}</span>
-          </p>
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            <span className="text-violet-300">◌</span>
+            <span>Assets</span>
+          </div>
+          <div className="mt-4 text-2xl font-medium tracking-tight text-zinc-100">
+            {selectedAssetCount} media files selected
+          </div>
+          <div className="mt-3 text-sm leading-7 text-zinc-500">
+            {selectedAssetCount > 0
+              ? 'Selected assets from your library and uploads will be used to generate the final creative.'
+              : 'No media files selected yet.'}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+            <span className="text-violet-300">◌</span>
+            <span>Scripts To Render</span>
+          </div>
+          <div className="mt-4 space-y-3">
+            {selectedScripts.length > 0 ? (
+              selectedScripts.map((script) => (
+                <div key={script.id} className="flex items-center gap-3 text-sm text-zinc-100">
+                  <Check className="h-4 w-4 text-emerald-400" />
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${SCRIPT_STYLE_STYLES[script.style]}`}>
+                    {script.style}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-zinc-500">No scripts selected yet.</div>
+            )}
+          </div>
         </div>
       </div>
-      <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/70 p-5">
-        <p className="text-sm font-semibold text-white">Create flow handoff</p>
-        <p className="mt-2 text-sm leading-6 text-zinc-400">
-          The next action stores this wizard state as a draft and opens the existing confirmation page. Real rendering still happens downstream in the current Sprokl pipeline after project creation.
-        </p>
+
+      <div className="mt-5 rounded-3xl border border-zinc-800 bg-zinc-900/60 px-5 py-4">
+        <div className="flex items-start gap-3">
+          <Clock3 className="mt-0.5 h-4 w-4 text-zinc-500" />
+          <div>
+            <div className="text-sm text-zinc-100">
+              Estimated rendering time: <span className="font-semibold">3-7 minutes</span> per video
+            </div>
+            <div className="mt-1 text-sm text-zinc-500">
+              All selected variants render in parallel. You&apos;ll receive a browser notification when complete.
+            </div>
+          </div>
+        </div>
       </div>
+
+      <div className="mt-5 rounded-3xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
+        <div className="text-sm font-medium text-amber-200">Free plan: Sprokl watermark included</div>
+        <div className="mt-1 text-sm leading-6 text-amber-300/90">
+          Videos on the Free plan include a Sprokl watermark in the bottom-right corner. Upgrade later to remove it.
+        </div>
+      </div>
+
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
-        >
-          Back to Scripts
-        </button>
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={submitting}
-          className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          {submitting ? 'Starting render...' : 'Start rendering'}
-        </button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-2xl border border-zinc-700 bg-zinc-900 px-5 py-3 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800"
+          >
+            Back to Scripts
+          </button>
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={submitting}
+            className="rounded-2xl gradient-primary px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            {submitting ? 'Starting render...' : 'Start Rendering'}
+          </button>
+        </div>
       </div>
     </StepPanel>
   );
@@ -1228,6 +1323,10 @@ export function CreateVideoTaskShell() {
     sellingPoints: '',
     targetAudience: '',
     productUrl: '',
+    promotionalPricingEnabled: false,
+    originalPrice: '',
+    salePrice: '',
+    promoDescription: '',
   });
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft>({
     aspectRatio: '9:16',
@@ -1239,22 +1338,70 @@ export function CreateVideoTaskShell() {
   const [scriptDrafts, setScriptDrafts] = useState<ScriptDraft[]>([]);
   const [selectedScriptIds, setSelectedScriptIds] = useState<string[]>([]);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [localUploadDrafts, setLocalUploadDrafts] = useState<LocalUploadItem[]>([]);
   const [submittingRender, setSubmittingRender] = useState(false);
+
+  function validateStep(step: StepId) {
+    if (step === 1) {
+      if (selectedAssetIds.length + localUploadDrafts.length < 2) {
+        toast.error('Select at least 2 media files before continuing.');
+        return false;
+      }
+      return true;
+    }
+
+    if (step === 2) {
+      if (
+        !productBriefDraft.productName.trim() ||
+        !productBriefDraft.productDescription.trim() ||
+        !productBriefDraft.sellingPoints.trim() ||
+        !productBriefDraft.targetAudience.trim()
+      ) {
+        toast.error('Complete all required product details before continuing.');
+        return false;
+      }
+      return true;
+    }
+
+    if (step === 3) {
+      if (!settingsDraft.aspectRatio || !settingsDraft.duration || !settingsDraft.language || !settingsDraft.voice || !settingsDraft.music) {
+        toast.error('Complete all video settings before continuing.');
+        return false;
+      }
+      return true;
+    }
+
+    if (step === 4) {
+      if (selectedScriptIds.length < 1) {
+        toast.error('Select at least 1 script before continuing.');
+        return false;
+      }
+      return true;
+    }
+
+    return true;
+  }
+
+  function goToStep(nextStep: StepId) {
+    if (nextStep > currentStep && !validateStep(currentStep)) return;
+    setCurrentStep(nextStep);
+  }
 
   async function handleCreateFromWizard() {
     if (submittingRender) return;
-    if (!productBriefDraft.productName.trim() || !productBriefDraft.productDescription.trim() || !productBriefDraft.sellingPoints.trim() || !productBriefDraft.targetAudience.trim()) {
-      toast.error('Complete the product brief before rendering');
-      setCurrentStep(2);
-      return;
-    }
-    if (selectedAssetIds.length === 0) {
-      toast.error('Select at least one library asset before rendering');
+    if (!validateStep(1)) {
       setCurrentStep(1);
       return;
     }
-    if (selectedScriptIds.length === 0) {
-      toast.error('Select at least one script before rendering');
+    if (!validateStep(2)) {
+      setCurrentStep(2);
+      return;
+    }
+    if (!validateStep(3)) {
+      setCurrentStep(3);
+      return;
+    }
+    if (!validateStep(4)) {
       setCurrentStep(4);
       return;
     }
@@ -1384,39 +1531,45 @@ export function CreateVideoTaskShell() {
   }
 
   return (
-    <div className="-m-4 min-h-[calc(100vh-65px)] overflow-hidden bg-zinc-950 text-zinc-100 sm:-m-6">
-      <div className="absolute inset-0 hero-grid opacity-35" />
-      <div className="absolute inset-x-0 top-0 h-56 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.24),transparent_60%)]" />
+    <div className="relative isolate -m-4 min-h-[calc(100vh-65px)] overflow-hidden bg-zinc-950 text-zinc-100 sm:-m-6">
+      <div className="pointer-events-none absolute inset-0 hero-grid opacity-35" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[radial-gradient(circle_at_top,rgba(96,165,250,0.24),transparent_60%)]" />
 
       <div className="relative mx-auto min-h-[calc(100vh-65px)] max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
             Build short video ads from product inputs
           </h1>
-          <p className="mx-auto mt-3 max-w-3xl text-sm leading-6 text-zinc-400 sm:text-base">
-            Start from your media, define the product brief, adjust the generation settings, and keep the current Sprokl creation flow intact.
-          </p>
         </div>
 
         <div className="space-y-6">
-          <WizardProgress currentStep={currentStep} onSelect={setCurrentStep} />
+          <WizardProgress currentStep={currentStep} onSelect={goToStep} />
 
           {currentStep === 1 ? (
             <MediaStep
               selectedIds={selectedAssetIds}
+              localUploads={localUploadDrafts}
               onChangeSelectedIds={setSelectedAssetIds}
-              onNext={() => setCurrentStep(2)}
+              onChangeLocalUploads={setLocalUploadDrafts}
+              onNext={() => goToStep(2)}
             />
           ) : null}
 
-          {currentStep === 2 ? <ProductBriefStep draft={productBriefDraft} onChange={setProductBriefDraft} /> : null}
+          {currentStep === 2 ? (
+            <ProductBriefStep
+              draft={productBriefDraft}
+              onChange={setProductBriefDraft}
+              onBack={() => setCurrentStep(1)}
+              onNext={() => goToStep(3)}
+            />
+          ) : null}
 
           {currentStep === 3 ? (
             <SettingsStep
               draft={settingsDraft}
               onChange={setSettingsDraft}
               onBack={() => setCurrentStep(2)}
-              onNext={() => setCurrentStep(4)}
+              onNext={() => goToStep(4)}
             />
           ) : null}
 
@@ -1428,7 +1581,7 @@ export function CreateVideoTaskShell() {
               onChangeScripts={setScriptDrafts}
               onChangeSelectedIds={setSelectedScriptIds}
               onBack={() => setCurrentStep(3)}
-              onNext={() => setCurrentStep(5)}
+              onNext={() => goToStep(5)}
             />
           ) : null}
 
@@ -1438,6 +1591,7 @@ export function CreateVideoTaskShell() {
               settings={settingsDraft}
               scripts={scriptDrafts}
               selectedIds={selectedScriptIds}
+              selectedAssetCount={selectedAssetIds.length}
               submitting={submittingRender}
               onCreate={handleCreateFromWizard}
               onBack={() => setCurrentStep(4)}

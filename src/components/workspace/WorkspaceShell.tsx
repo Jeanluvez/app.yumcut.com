@@ -10,10 +10,10 @@ import {
   Grid2X2,
   Image as ImageIcon,
   MoreHorizontal,
+  Plus,
   Search,
   RefreshCw,
   Trash2,
-  Upload,
   Video,
 } from 'lucide-react';
 import { Api } from '@/lib/api-client';
@@ -69,14 +69,6 @@ type AssetItem = {
     id: string;
     name: string;
   } | null;
-};
-
-type AssetSummary = {
-  plan: 'free' | 'pro' | 'business';
-  usedBytes: string;
-  storageLimitBytes: string;
-  remainingBytes: string;
-  assetCount: number;
 };
 
 type ProjectItem = {
@@ -237,15 +229,6 @@ function getTimeUntilExpiry(expiresAt: string) {
   return `${days}d left`;
 }
 
-function formatBytesCompact(value: string | number | bigint) {
-  const bytes = typeof value === 'bigint' ? Number(value) : Number(value);
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`.replace('.00', '');
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`.replace('.00', '');
-}
-
 function formatProjectDate(value: string | null | undefined) {
   if (!value) return 'Unknown date';
   const date = new Date(value);
@@ -284,7 +267,6 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
   const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [assetsLoading, setAssetsLoading] = useState(true);
-  const [assetSummary, setAssetSummary] = useState<AssetSummary | null>(null);
   const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
   const [assetFilter, setAssetFilter] = useState<'all' | 'image' | 'video' | 'hook'>('all');
   const [assetSearch, setAssetSearch] = useState('');
@@ -474,15 +456,10 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
   async function loadAssets() {
     setAssetsLoading(true);
     try {
-      const [result, summary] = await Promise.all([
-        Api.getAssets(),
-        Api.getAssetSummary(),
-      ]);
+      const result = await Api.getAssets();
       setAssets(Array.isArray(result) ? (result as AssetItem[]) : []);
-      setAssetSummary(summary);
     } catch {
       setAssets([]);
-      setAssetSummary(null);
     } finally {
       setAssetsLoading(false);
     }
@@ -730,8 +707,8 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex flex-1 flex-col gap-6 lg:flex-row lg:items-center">
+                  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_180px] xl:items-center xl:gap-4">
+                    <div className="flex min-w-0 flex-col gap-6 lg:flex-row lg:items-center xl:pr-2">
                       <div className="relative w-full max-w-xl">
                         <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                         <Input
@@ -741,7 +718,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                           className="w-full rounded-2xl border-zinc-700 bg-zinc-900 py-3 pl-11 text-zinc-100 placeholder:text-zinc-500"
                         />
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {[
                       { value: 'all' as const, label: 'All' },
                       { value: 'active' as const, label: 'Rendering' },
@@ -753,7 +730,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                         key={`${filter.label}-${index}`}
                         type="button"
                         onClick={() => setProjectFilter(filter.value)}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        className={`shrink-0 rounded-full border px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap transition ${
                           projectFilter === filter.value
                             ? 'border-blue-400/40 bg-blue-500/10 text-blue-200'
                             : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
@@ -765,7 +742,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                       </div>
                     </div>
 
-                    <div className="w-full max-w-[180px]">
+                    <div className="w-full max-w-[180px] justify-self-end">
                       <Select value={projectSort} onValueChange={(value: 'newest' | 'oldest') => setProjectSort(value)}>
                         <SelectTrigger className="rounded-2xl border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-900 focus:ring-0 focus:ring-offset-0 data-[state=open]:bg-zinc-900">
                           <SelectValue placeholder="Sort projects" />
@@ -788,7 +765,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                     </div>
                   </div>
 
-                  <div className="grid justify-items-start gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                   {filteredProjects.map((item: any, index) => {
                     const statusMeta = getProjectStatusMeta(item.status);
                     const relatedVideos = videos.filter((video) => video.project.id === item.id);
@@ -925,7 +902,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                       <div
                         key={item.id}
                         onClick={isReady ? () => router.push(`/project/${item.id}`) : undefined}
-                        className={`group relative w-full max-w-[272px] min-w-0 rounded-[24px] border bg-zinc-900/80 transition-all ${
+                        className={`group relative w-full min-w-0 rounded-[24px] border bg-zinc-900/80 transition-all ${
                           isReady ? 'cursor-pointer' : 'cursor-default'
                         } ${
                           isMenuOpen
@@ -946,7 +923,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
           </Card>
       ) : (
         <Card id="assets-section" className="border-zinc-800 bg-transparent shadow-none">
-          <CardHeader className="flex-col items-start gap-3">
+          <CardHeader className="flex-col items-start gap-3 pb-0">
             <div>
               <CardTitle className="text-3xl font-semibold tracking-tight text-zinc-100">My Assets</CardTitle>
               <CardDescription className="mt-2 text-sm text-zinc-400">
@@ -954,34 +931,9 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
               </CardDescription>
             </div>
           </CardHeader>
-          <CardContent className="space-y-5 px-0">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span className="font-medium text-zinc-200">Storage used</span>
-                <div className="flex items-center gap-3 text-zinc-400">
-                  <span className="font-medium text-zinc-100">
-                    {assetSummary ? formatBytesCompact(assetSummary.usedBytes) : '0 MB'} / {assetSummary ? formatBytesCompact(assetSummary.storageLimitBytes) : '0 GB'}
-                  </span>
-                  <span>{assetSummary?.assetCount ?? assets.length} files</span>
-                </div>
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-zinc-800">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-500"
-                  style={{
-                    width: assetSummary
-                      ? `${Math.min(
-                          100,
-                          (Number(assetSummary.usedBytes) / Math.max(Number(assetSummary.storageLimitBytes), 1)) * 100,
-                        )}%`
-                      : '0%',
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
+          <CardContent className="space-y-6 px-0">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-1 flex-col gap-6 lg:flex-row lg:items-center">
                 <div className="relative w-full max-w-xl">
                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <Input
@@ -1016,30 +968,12 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="inline-flex rounded-2xl border border-zinc-700 bg-zinc-900 p-1 text-zinc-400">
-                  <button type="button" className="rounded-xl bg-zinc-800 px-3 py-2 text-zinc-100">
-                    <Grid2X2 className="h-4 w-4" />
-                  </button>
-                </div>
                 <Button asChild variant="outline" className="rounded-2xl border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800">
                   <Link href="/create">
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Task
                   </Link>
                 </Button>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-950/60 px-5 py-6 text-sm text-zinc-500">
-              <div className="flex flex-wrap items-center gap-3">
-                <Upload className="h-4 w-4" />
-                <span>Drop files here to upload</span>
-                <span>•</span>
-                <span>MP4, MOV, JPG, PNG, GIF</span>
-                <span>•</span>
-                <Link href="/create" className="font-medium text-zinc-300 hover:text-zinc-100">
-                  Open Create Task to attach assets
-                </Link>
               </div>
             </div>
 
@@ -1048,17 +982,12 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                 No assets found for this filter.
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 {groupedAssetProjects.map((group, index) => {
                   const previewTone = getProjectCardTone(index);
                   const images = group.assets.filter((asset) => asset.type === 'image' || asset.mimeType.startsWith('image'));
                   const videosInGroup = group.assets.filter((asset) => asset.type === 'video' || asset.type === 'hook' || asset.mimeType.startsWith('video'));
-                  const totalUsageCount = group.assets.reduce((sum, asset) => sum + (asset.usageCount ?? 0), 0);
-                  const latestExpiry = group.assets
-                    .map((asset) => asset.expiresAt)
-                    .filter(Boolean)
-                    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0];
-                  const expiryLabel = latestExpiry ? getTimeUntilExpiry(latestExpiry) : null;
+                  const hooks = group.assets.filter((asset) => asset.type === 'hook');
                   const previewAssets = group.assets.slice(0, 4);
                   const canOpenProject = group.id !== 'unassigned';
 
@@ -1066,10 +995,14 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                     <Link
                       key={group.id}
                       href={canOpenProject ? `/assets/${group.id}` : '/workspace/assets'}
-                      className="overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/80 transition-all hover:border-zinc-700"
+                      className="group relative w-full min-w-0 overflow-hidden rounded-[24px] border border-zinc-800 bg-zinc-900/80 transition-all hover:border-blue-400/45 hover:shadow-[0_0_0_1px_rgba(96,165,250,0.22),0_12px_28px_rgba(15,23,42,0.28)]"
                     >
-                      <div className={`relative h-40 border-b border-zinc-800 bg-gradient-to-br ${previewTone}`}>
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_40%)]" />
+                      <div className={`relative h-44 border-b border-zinc-800 bg-gradient-to-br ${previewTone}`}>
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_45%)]" />
+                        <div className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-lg bg-black/45 px-2 py-1 text-[11px] font-semibold text-zinc-100 backdrop-blur">
+                          <Grid2X2 className="h-3.5 w-3.5" />
+                          {group.assets.length} asset{group.assets.length === 1 ? '' : 's'}
+                        </div>
                         <div className="absolute inset-0 grid grid-cols-2 gap-1 p-3">
                           {previewAssets.map((assetPreview) => {
                             const isVideoAsset = assetPreview.type === 'video' || assetPreview.type === 'hook' || assetPreview.mimeType.startsWith('video');
@@ -1092,29 +1025,30 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                             </div>
                           ) : null}
                         </div>
-                        <div className="absolute bottom-3 left-3 rounded-lg bg-black/35 px-2 py-1 text-[11px] font-semibold text-zinc-100 backdrop-blur">
-                          {group.assets.length} asset{group.assets.length === 1 ? '' : 's'}
-                        </div>
                       </div>
 
                       <div className="space-y-3 p-4">
-                        <div className="truncate text-base font-semibold text-zinc-100">{group.name}</div>
-                        <div className="flex items-center justify-between gap-3 text-sm text-zinc-500">
-                          <span>{images.length} images</span>
-                          <span>{videosInGroup.length} videos</span>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-base font-semibold text-zinc-100">{group.name}</div>
+                            <div className="mt-1 text-xs text-zinc-500">
+                              {formatProjectDate(group.updatedAt)}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center justify-between gap-3 text-sm text-zinc-400">
-                          <span>x{totalUsageCount} reuse</span>
-                          <span className={expiryLabel === 'Expired' ? 'text-rose-300' : 'text-zinc-500'}>
-                            {expiryLabel || ''}
+                        <div className="flex items-center justify-between gap-3 border-t border-zinc-800 pt-3 text-xs text-zinc-500">
+                          <span className="inline-flex items-center gap-1.5">
+                            <ImageIcon className="h-4 w-4" />
+                            <span>{images.length}</span>
                           </span>
-                        </div>
-                        <div className="border-t border-zinc-800 pt-3 text-xs text-zinc-500">
-                          Updated {group.updatedAt ? new Date(group.updatedAt).toLocaleDateString() : 'recently'}
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-sm text-zinc-300">
-                          <span>{canOpenProject ? 'Open project assets' : 'Review unassigned assets'}</span>
-                          <span className="text-zinc-500">{group.assets.length} files</span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Video className="h-4 w-4" />
+                            <span>{videosInGroup.length}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5">
+                            <Film className="h-4 w-4" />
+                            <span>{hooks.length}</span>
+                          </span>
                         </div>
                       </div>
                     </Link>
