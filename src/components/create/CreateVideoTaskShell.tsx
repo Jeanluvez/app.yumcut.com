@@ -52,6 +52,8 @@ type LocalUploadItem = {
   name: string;
   size: string;
   kind: 'video' | 'image';
+  file: File;
+  assetId?: string;
 };
 
 type ProductBriefDraft = {
@@ -262,14 +264,18 @@ function StepPanel({
 function MediaStep({
   selectedIds,
   localUploads,
+  selectedCount,
   onChangeSelectedIds,
   onChangeLocalUploads,
+  onRemoveLocalUpload,
   onNext,
 }: {
   selectedIds: string[];
   localUploads: LocalUploadItem[];
+  selectedCount: number;
   onChangeSelectedIds: (next: string[]) => void;
   onChangeLocalUploads: (next: LocalUploadItem[]) => void;
+  onRemoveLocalUpload: (id: string, assetId?: string) => void;
   onNext: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<'library' | 'upload'>('upload');
@@ -318,6 +324,7 @@ function MediaStep({
       name: file.name,
       size: formatBytes(String(file.size)),
       kind: file.type.startsWith('video') ? 'video' : 'image',
+      file,
     } as LocalUploadItem));
 
     onChangeLocalUploads([...localUploads, ...nextFiles]);
@@ -354,10 +361,10 @@ function MediaStep({
           </div>
           <div className="hidden items-center gap-4 text-xs sm:flex">
             <span className="text-zinc-500">
-              <span className="font-semibold text-blue-300">{localUploads.length}</span> uploaded
+              <span className="font-semibold text-blue-300">{localUploads.length}</span> local files
             </span>
             <span className="text-zinc-500">
-              <span className="font-semibold text-blue-300">{selectedIds.length}</span> selected
+              <span className="font-semibold text-blue-300">{selectedCount}</span> selected
             </span>
           </div>
         </div>
@@ -491,10 +498,13 @@ function MediaStep({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-zinc-200">{file.name}</p>
                       <p className="mt-1 text-xs text-zinc-500">{file.size}</p>
+                      <p className="mt-1 text-[11px] text-zinc-600">
+                        {file.assetId ? 'Uploaded to draft project' : 'Pending upload'}
+                      </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => onChangeLocalUploads(localUploads.filter((item) => item.id !== file.id))}
+                      onClick={() => onRemoveLocalUpload(file.id, file.assetId)}
                       className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-800"
                     >
                       Remove
@@ -1371,8 +1381,34 @@ export function CreateVideoTaskShell() {
   const [localUploadDrafts, setLocalUploadDrafts] = useState<LocalUploadItem[]>([]);
   const [submittingRender, setSubmittingRender] = useState(false);
 
-  async function createDraftProjectIfNeeded() {
-    if (draftProjectId) return draftProjectId;
+  const pendingLocalUploads = localUploadDrafts.filter((item) => !item.assetId);
+  const selectedMediaCount = selectedAssetIds.length + pendingLocalUploads.length;
+
+  async function uploadPendingLocalFiles(projectId: string) {
+    const pendingFiles = localUploadDrafts.filter((item) => !item.assetId);
+    if (pendingFiles.length === 0) return [];
+
+    const uploadedAssetIds: string[] = [];
+    for (const item of pendingFiles) {
+      const uploaded = await Api.uploadAsset(projectId, item.file, item.kind);
+      uploadedAssetIds.push(uploaded.id);
+      setLocalUploadDrafts((prev) =>
+        prev.map((entry) => (entry.id === item.id ? { ...entry, assetId: uploaded.id } : entry)),
+      );
+    }
+
+    return uploadedAssetIds;
+  }
+
+  async function ensureDraftProjectReady() {
+    if (draftProjectId) {
+      const uploadedAssetIds = await uploadPendingLocalFiles(draftProjectId);
+      const resolvedSelectedAssetIds = Array.from(new Set([...selectedAssetIds, ...uploadedAssetIds]));
+      if (uploadedAssetIds.length > 0) {
+        setSelectedAssetIds(resolvedSelectedAssetIds);
+      }
+      return { projectId: draftProjectId, selectedAssetIds: resolvedSelectedAssetIds };
+    }
 
     const created = await Api.createProject({
       name: productBriefDraft.productName.trim().slice(0, 120),
@@ -1403,12 +1439,18 @@ export function CreateVideoTaskShell() {
       });
     }
 
-    return created.id;
+    const uploadedAssetIds = await uploadPendingLocalFiles(created.id);
+    const resolvedSelectedAssetIds = Array.from(new Set([...selectedAssetIds, ...uploadedAssetIds]));
+    if (uploadedAssetIds.length > 0) {
+      setSelectedAssetIds(resolvedSelectedAssetIds);
+    }
+
+    return { projectId: created.id, selectedAssetIds: resolvedSelectedAssetIds };
   }
 
   function validateStep(step: StepId) {
     if (step === 1) {
-      if (selectedAssetIds.length + localUploadDrafts.length < 2) {
+      if (selectedMediaCount < 2) {
         toast.error('Select at least 2 media files before continuing.');
         return false;
       }
@@ -1447,6 +1489,13 @@ export function CreateVideoTaskShell() {
     return true;
   }
 
+  function removeLocalUpload(id: string, assetId?: string) {
+    setLocalUploadDrafts((prev) => prev.filter((item) => item.id !== id));
+    if (assetId) {
+      setSelectedAssetIds((prev) => prev.filter((item) => item !== assetId));
+    }
+  }
+
   async function goToStep(nextStep: StepId) {
     if (nextStep > currentStep) {
       for (let step = currentStep; step < nextStep; step += 1) {
@@ -1454,11 +1503,11 @@ export function CreateVideoTaskShell() {
       }
     }
 
-    if (nextStep === 4 && !draftProjectId) {
+    if (nextStep === 4) {
       if (bootstrappingProject) return;
       setBootstrappingProject(true);
       try {
-        await createDraftProjectIfNeeded();
+        await ensureDraftProjectReady();
       } catch (error: any) {
         const message = error?.error?.message || 'Failed to prepare the draft project.';
         toast.error(message);
@@ -1493,11 +1542,11 @@ export function CreateVideoTaskShell() {
     setSubmittingRender(true);
 
     try {
-      const projectId = draftProjectId ?? (await createDraftProjectIfNeeded());
+      const { projectId, selectedAssetIds: resolvedSelectedAssetIds } = await ensureDraftProjectReady();
 
-      await Api.importProjectAssets(projectId, selectedAssetIds);
+      await Api.importProjectAssets(projectId, resolvedSelectedAssetIds);
       await Api.updateProject(projectId, {
-        selectedAssetIds,
+        selectedAssetIds: resolvedSelectedAssetIds,
         promoEnabled: productBriefDraft.promotionalPricingEnabled,
         promoInfo: productBriefDraft.promotionalPricingEnabled
           ? {
@@ -1558,8 +1607,10 @@ export function CreateVideoTaskShell() {
             <MediaStep
               selectedIds={selectedAssetIds}
               localUploads={localUploadDrafts}
+              selectedCount={selectedMediaCount}
               onChangeSelectedIds={setSelectedAssetIds}
               onChangeLocalUploads={setLocalUploadDrafts}
+              onRemoveLocalUpload={removeLocalUpload}
               onNext={() => goToStep(2)}
             />
           ) : null}
