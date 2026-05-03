@@ -14,7 +14,7 @@ type AuthEntryShellProps = {
 
 const COPY = {
   "sign-in": {
-    eyebrow: "TIKTOK VIDEOS FOR SELLERS",
+    eyebrow: "SHORT-FORM VIDEO ADS",
     title: "Welcome back",
     description:
       "Sign in to your Sprokl account and continue building product-to-video workflows without leaving the workspace.",
@@ -27,10 +27,10 @@ const COPY = {
     subtitle: "Sign in to your Sprokl account",
   },
   "sign-up": {
-    eyebrow: "TIKTOK VIDEOS FOR SELLERS",
+    eyebrow: "SHORT-FORM VIDEO ADS",
     title: "Start for free",
     description:
-      "Create your Sprokl workspace. No credit card required now. Upgrade and pricing selection can come later inside the product.",
+      "Create your Sprokl workspace and start generating videos with AI script support.",
     primaryCta: "Sign up with Google",
     secondaryCta: "Sign up with Apple",
     footerLabel: "Already have an account?",
@@ -44,22 +44,16 @@ const COPY = {
 const VALUE_POINTS = [
   {
     title: "3 AI scripts in seconds",
-    description: "Claude generates Hook, Body & CTA for every style",
+    description: "AI generates Hook, Body & CTA for every style",
   },
   {
     title: "Auto-synthesize videos",
     description: "TTS + your assets + music + captions — fully automated",
   },
   {
-    title: "Under 10 minutes",
+    title: "In a few minutes",
     description: "From product info to polished video, start to finish",
   },
-] as const;
-
-const PLAN_ITEMS = [
-  { label: "Free", detail: "3 videos/mo • 7-day storage", active: false },
-  { label: "Pro", detail: "30 videos/mo • 30-day storage", active: true, badge: "Popular" },
-  { label: "Business", detail: "Unlimited • 90-day storage", active: false },
 ] as const;
 
 export function AuthEntryShell({ mode }: AuthEntryShellProps) {
@@ -108,7 +102,7 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
                 No video experience <span className="text-indigo-300">needed.</span>
               </h1>
               <p className="mt-4 text-sm leading-6 text-zinc-400">
-                Turn your product info into scroll-stopping TikTok videos automatically. AI writes the script, we build the video.
+                Turn your product info into short-form videos automatically. AI writes the script, we build the video.
               </p>
             </div>
 
@@ -134,7 +128,7 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
 
             <div className="mt-auto max-w-[360px] rounded-3xl border border-white/8 bg-white/[0.04] p-4 backdrop-blur-sm">
               <p className="text-sm italic leading-6 text-zinc-200">
-                “I made 3 TikTok videos for my skincare line in one afternoon. I'd never edited a video before.”
+                “I made 3 short-form videos for my skincare line in one afternoon. I'd never edited a video before.”
               </p>
               <div className="mt-5 flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-400 text-xs font-semibold text-white">
@@ -142,12 +136,12 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
                 </div>
                 <div>
                   <p className="text-[13px] font-medium text-zinc-100">Jasmine Okafor</p>
-                  <p className="text-[11px] text-zinc-500">TikTok Shop Seller · 42K followers</p>
+                  <p className="text-[11px] text-zinc-500">DTC Seller · 42K followers</p>
                 </div>
               </div>
             </div>
-          </div>
-        </aside>
+            </div>
+          </aside>
 
         <section className="flex items-center justify-center px-4 py-10 sm:px-6 lg:px-10">
           <div className="w-full max-w-[460px]">
@@ -180,32 +174,6 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
               <p className="mt-2 text-sm leading-6 text-zinc-600">{copy.description}</p>
             </div>
 
-            {isSignUp ? (
-              <div className="mt-8 grid grid-cols-3 gap-2">
-                {PLAN_ITEMS.map((plan) => (
-                  <div
-                    key={plan.label}
-                    className={[
-                      "rounded-2xl border px-3 py-4 text-center",
-                      plan.active
-                        ? "border-violet-500/70 bg-violet-500/8"
-                        : "border-white/10 bg-white/[0.02]",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-center justify-center gap-1">
-                      <span className="text-sm font-medium text-zinc-100">{plan.label}</span>
-                      {plan.badge ? (
-                        <span className="rounded-full bg-violet-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                          {plan.badge}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-2 text-[11px] leading-4 text-zinc-500">{plan.detail}</p>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
             <div className="mt-8 grid gap-3">
               <button
                 type="button"
@@ -237,15 +205,6 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
               <span className="h-px flex-1 bg-white/10" />
               <span>Real auth only</span>
               <span className="h-px flex-1 bg-white/10" />
-            </div>
-
-            <div className="mt-7 rounded-3xl border border-white/8 bg-white/[0.03] p-5">
-              <p className="text-sm font-medium text-zinc-100">
-                {isSignUp ? "Account creation note" : "Sign-in note"}
-              </p>
-              <p className="mt-2 text-sm leading-7 text-zinc-500">
-                This page currently supports live Clerk authentication through Google and Apple only. Email/password, forgot password, and pricing-bound signup remain out of scope for this pass.
-              </p>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-500">
