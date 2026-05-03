@@ -872,6 +872,7 @@ function ScriptsStep({
   onChangeSelectedIds,
   onBack,
   onNext,
+  isBootstrapping,
 }: {
   projectId: string | null;
   scripts: ScriptDraft[];
@@ -880,6 +881,7 @@ function ScriptsStep({
   onChangeSelectedIds: (next: string[]) => void;
   onBack: () => void;
   onNext: () => void;
+  isBootstrapping: boolean;
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -1003,6 +1005,18 @@ function ScriptsStep({
         </button>
       }
     >
+      {isBootstrapping && !projectId ? (
+        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 px-5 py-5">
+          <div className="flex items-center gap-3 text-sm text-zinc-200">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-300" />
+            <span>Preparing your script workspace.</span>
+          </div>
+          <div className="mt-2 text-sm text-zinc-500">
+            We are creating the draft project and getting the script generation flow ready.
+          </div>
+        </div>
+      ) : null}
+
       {isGenerating ? (
         <div className="space-y-4">
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 px-5 py-4">
@@ -1384,31 +1398,8 @@ export function CreateVideoTaskShell() {
   const pendingLocalUploads = localUploadDrafts.filter((item) => !item.assetId);
   const selectedMediaCount = selectedAssetIds.length + pendingLocalUploads.length;
 
-  async function uploadPendingLocalFiles(projectId: string) {
-    const pendingFiles = localUploadDrafts.filter((item) => !item.assetId);
-    if (pendingFiles.length === 0) return [];
-
-    const uploadedAssetIds: string[] = [];
-    for (const item of pendingFiles) {
-      const uploaded = await Api.uploadAsset(projectId, item.file, item.kind);
-      uploadedAssetIds.push(uploaded.id);
-      setLocalUploadDrafts((prev) =>
-        prev.map((entry) => (entry.id === item.id ? { ...entry, assetId: uploaded.id } : entry)),
-      );
-    }
-
-    return uploadedAssetIds;
-  }
-
-  async function ensureDraftProjectReady() {
-    if (draftProjectId) {
-      const uploadedAssetIds = await uploadPendingLocalFiles(draftProjectId);
-      const resolvedSelectedAssetIds = Array.from(new Set([...selectedAssetIds, ...uploadedAssetIds]));
-      if (uploadedAssetIds.length > 0) {
-        setSelectedAssetIds(resolvedSelectedAssetIds);
-      }
-      return { projectId: draftProjectId, selectedAssetIds: resolvedSelectedAssetIds };
-    }
+  async function createDraftProjectIfNeeded() {
+    if (draftProjectId) return draftProjectId;
 
     const created = await Api.createProject({
       name: productBriefDraft.productName.trim().slice(0, 120),
@@ -1439,13 +1430,23 @@ export function CreateVideoTaskShell() {
       });
     }
 
-    const uploadedAssetIds = await uploadPendingLocalFiles(created.id);
-    const resolvedSelectedAssetIds = Array.from(new Set([...selectedAssetIds, ...uploadedAssetIds]));
-    if (uploadedAssetIds.length > 0) {
-      setSelectedAssetIds(resolvedSelectedAssetIds);
+    return created.id;
+  }
+
+  async function uploadPendingLocalFiles(projectId: string) {
+    const pendingFiles = localUploadDrafts.filter((item) => !item.assetId);
+    if (pendingFiles.length === 0) return [];
+
+    const uploadedAssetIds: string[] = [];
+    for (const item of pendingFiles) {
+      const uploaded = await Api.uploadAsset(projectId, item.file, item.kind);
+      uploadedAssetIds.push(uploaded.id);
+      setLocalUploadDrafts((prev) =>
+        prev.map((entry) => (entry.id === item.id ? { ...entry, assetId: uploaded.id } : entry)),
+      );
     }
 
-    return { projectId: created.id, selectedAssetIds: resolvedSelectedAssetIds };
+    return uploadedAssetIds;
   }
 
   function validateStep(step: StepId) {
@@ -1507,13 +1508,16 @@ export function CreateVideoTaskShell() {
       if (bootstrappingProject) return;
       setBootstrappingProject(true);
       try {
-        await ensureDraftProjectReady();
+        void createDraftProjectIfNeeded()
+          .catch((error: any) => {
+            const message = error?.error?.message || 'Failed to prepare the draft project.';
+            toast.error(message);
+          })
+          .finally(() => {
+            setBootstrappingProject(false);
+          });
       } catch (error: any) {
-        const message = error?.error?.message || 'Failed to prepare the draft project.';
-        toast.error(message);
         return;
-      } finally {
-        setBootstrappingProject(false);
       }
     }
 
@@ -1542,49 +1546,81 @@ export function CreateVideoTaskShell() {
     setSubmittingRender(true);
 
     try {
-      const { projectId, selectedAssetIds: resolvedSelectedAssetIds } = await ensureDraftProjectReady();
+      const projectId = await createDraftProjectIfNeeded();
+      const baseSelectedAssetIds = selectedAssetIds.slice();
+      const baseScripts = scriptDrafts.map((script) => ({ ...script }));
 
-      await Api.importProjectAssets(projectId, resolvedSelectedAssetIds);
-      await Api.updateProject(projectId, {
-        selectedAssetIds: resolvedSelectedAssetIds,
-        promoEnabled: productBriefDraft.promotionalPricingEnabled,
-        promoInfo: productBriefDraft.promotionalPricingEnabled
-          ? {
-              originalPrice: productBriefDraft.originalPrice.trim(),
-              salePrice: productBriefDraft.salePrice.trim(),
-              discountLabel: productBriefDraft.promoDescription.trim(),
-            }
-          : undefined,
-        renderOptions: {
-          captionsEnabled: true,
-          backgroundMusicEnabled: settingsDraft.music !== 'none',
-          stylePreset: 'balanced',
-          useHookClip: true,
-          animateImages: true,
-          shuffleVideoSlices: true,
-        },
-      });
-
-      for (const script of scriptDrafts) {
-        await Api.updateProjectScript(projectId, script.id, {
-          styleLabel: script.style,
-          hookText: script.hook,
-          bodyText: script.body,
-          ctaText: script.cta,
-          isSelected: selectedScriptIds.includes(script.id),
-        });
-      }
-
-      await Api.createVideoJobs(projectId, { overwrite: true });
-      await Api.processVideoJobs(projectId);
+      window.dispatchEvent(
+        new CustomEvent('project:created', {
+          detail: {
+            id: projectId,
+            title: productBriefDraft.productName.trim() || 'Untitled product',
+            status: 'generating',
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new CustomEvent('project:updated', {
+          detail: {
+            id: projectId,
+            title: productBriefDraft.productName.trim() || 'Untitled product',
+            status: 'generating',
+          },
+        }),
+      );
 
       toast.success('Task created. Rendering started.');
       router.push('/workspace/projects');
+
+      void (async () => {
+        try {
+          const uploadedAssetIds = await uploadPendingLocalFiles(projectId);
+          const resolvedSelectedAssetIds = Array.from(new Set([...baseSelectedAssetIds, ...uploadedAssetIds]));
+
+          await Api.importProjectAssets(projectId, resolvedSelectedAssetIds);
+          await Api.updateProject(projectId, {
+            selectedAssetIds: resolvedSelectedAssetIds,
+            promoEnabled: productBriefDraft.promotionalPricingEnabled,
+            promoInfo: productBriefDraft.promotionalPricingEnabled
+              ? {
+                  originalPrice: productBriefDraft.originalPrice.trim(),
+                  salePrice: productBriefDraft.salePrice.trim(),
+                  discountLabel: productBriefDraft.promoDescription.trim(),
+                }
+              : undefined,
+            renderOptions: {
+              captionsEnabled: true,
+              backgroundMusicEnabled: settingsDraft.music !== 'none',
+              stylePreset: 'balanced',
+              useHookClip: true,
+              animateImages: true,
+              shuffleVideoSlices: true,
+            },
+          });
+
+          for (const script of baseScripts) {
+            await Api.updateProjectScript(projectId, script.id, {
+              styleLabel: script.style,
+              hookText: script.hook,
+              bodyText: script.body,
+              ctaText: script.cta,
+              isSelected: selectedScriptIds.includes(script.id),
+            });
+          }
+
+          await Api.createVideoJobs(projectId, { overwrite: true });
+          void Api.processVideoJobs(projectId).catch((error: any) => {
+            const message = error?.error?.message || 'Task was created, but rendering needs attention.';
+            toast.error(message);
+          });
+        } catch (error: any) {
+          const message = error?.error?.message || 'Task was created, but rendering needs attention.';
+          toast.error(message);
+        }
+      })();
     } catch (error: any) {
       const message = error?.error?.message || 'The project was not fully started. Please review the project in workspace.';
       toast.error(message);
-    } finally {
-      setSubmittingRender(false);
     }
   }
 
@@ -1607,7 +1643,7 @@ export function CreateVideoTaskShell() {
             <MediaStep
               selectedIds={selectedAssetIds}
               localUploads={localUploadDrafts}
-              selectedCount={selectedMediaCount}
+              selectedCount={selectedAssetIds.length}
               onChangeSelectedIds={setSelectedAssetIds}
               onChangeLocalUploads={setLocalUploadDrafts}
               onRemoveLocalUpload={removeLocalUpload}
@@ -1642,6 +1678,7 @@ export function CreateVideoTaskShell() {
               onChangeSelectedIds={setSelectedScriptIds}
               onBack={() => setCurrentStep(3)}
               onNext={() => goToStep(5)}
+              isBootstrapping={bootstrappingProject}
             />
           ) : null}
 
