@@ -1,6 +1,7 @@
 "use client";
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Api } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 type ProjectItem = any;
 
@@ -15,6 +16,8 @@ const ProjectsContext = createContext<ProjectsContextValue | null>(null);
 export function ProjectsProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ProjectItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const previousStatusMapRef = useRef<Record<string, string | null | undefined>>({});
+  const hasInitialSnapshotRef = useRef(false);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -28,6 +31,57 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
     // Prefetch immediately on first client render to avoid popover delay
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const previous = previousStatusMapRef.current;
+    const next = Object.fromEntries(items.map((item) => [item.id, item.status])) as Record<string, string | null | undefined>;
+
+    if (hasInitialSnapshotRef.current) {
+      items.forEach((item) => {
+        const before = (previous[item.id] ?? '').toLowerCase();
+        const after = (item.status ?? '').toLowerCase();
+        const wasGenerating =
+          before === 'generating' ||
+          before === 'scripts_generated' ||
+          before === 'pending' ||
+          before === 'processing' ||
+          before === 'queued';
+        const isDone = after === 'done' || after === 'completed' || after === 'ready';
+        const isFailed = after === 'failed' || after === 'error' || after === 'cancelled';
+
+        if (wasGenerating && isDone) {
+          toast.success(`${item.title || item.name || 'Your video'} is ready.`);
+        } else if (before && before !== after && isFailed) {
+          toast.error(`${item.title || item.name || 'Your video'} failed to render.`);
+        }
+      });
+    } else {
+      hasInitialSnapshotRef.current = true;
+    }
+
+    previousStatusMapRef.current = next;
+  }, [items]);
+
+  useEffect(() => {
+    const hasActiveProjects = items.some((item) => {
+      const status = (item.status ?? '').toLowerCase();
+      return (
+        status === 'generating' ||
+        status === 'scripts_generated' ||
+        status === 'pending' ||
+        status === 'processing' ||
+        status === 'queued'
+      );
+    });
+
+    if (!hasActiveProjects) return;
+
+    const interval = window.setInterval(() => {
+      refresh();
+    }, 15000);
+
+    return () => window.clearInterval(interval);
+  }, [items, refresh]);
 
   useEffect(() => {
     // Keep in sync with app-level events
@@ -68,4 +122,3 @@ export function useProjects() {
   if (!ctx) return { items: [] as ProjectItem[], loading: true, refresh: () => {} } satisfies ProjectsContextValue;
   return ctx;
 }
-

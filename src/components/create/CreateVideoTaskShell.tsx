@@ -1395,7 +1395,6 @@ export function CreateVideoTaskShell() {
   const [localUploadDrafts, setLocalUploadDrafts] = useState<LocalUploadItem[]>([]);
   const [submittingRender, setSubmittingRender] = useState(false);
 
-  const pendingLocalUploads = localUploadDrafts.filter((item) => !item.assetId);
   const selectedMediaCount = selectedAssetIds.length + localUploadDrafts.length;
 
   async function createDraftProjectIfNeeded() {
@@ -1577,7 +1576,6 @@ export function CreateVideoTaskShell() {
           const uploadedAssetIds = await uploadPendingLocalFiles(projectId);
           const resolvedSelectedAssetIds = Array.from(new Set([...baseSelectedAssetIds, ...uploadedAssetIds]));
 
-          await Api.importProjectAssets(projectId, resolvedSelectedAssetIds);
           await Api.updateProject(projectId, {
             selectedAssetIds: resolvedSelectedAssetIds,
             promoEnabled: productBriefDraft.promotionalPricingEnabled,
