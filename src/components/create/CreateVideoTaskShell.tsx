@@ -82,6 +82,9 @@ type ScriptDraft = {
   hook: string;
   body: string;
   cta: string;
+  originalHook: string;
+  originalBody: string;
+  originalCta: string;
   edited?: boolean;
 };
 
@@ -144,50 +147,26 @@ const SCRIPT_STYLE_STYLES: Record<ScriptStyle, string> = {
   FOMO: 'border-pink-500/30 bg-pink-500/10 text-pink-200',
 };
 
-function generateMockScripts(productName: string): ScriptDraft[] {
-  const name = productName.trim() || 'your product';
+type GeneratedScriptApiItem = {
+  id: string;
+  styleLabel: string;
+  hookText: string;
+  bodyText: string;
+  ctaText: string;
+  isSelected: boolean;
+};
 
-  return [
-    {
-      id: 'storytelling',
-      style: 'Storytelling',
-      hook: `I stopped scrolling the second I saw what ${name} did in just a few days.`,
-      body: `${name} is built for short-form ads because the product payoff is easy to show fast. Start with the problem, show the before-and-after moment, then land on the strongest product proof in under ten seconds.`,
-      cta: 'Tap to see the product details and current offer.',
-    },
-    {
-      id: 'problem-solution',
-      style: 'Problem-Solution',
-      hook: `Still dealing with the same product problem every week? Here's the fix.`,
-      body: `Frame the pain point first, then explain how ${name} changes the outcome. Keep the demo visual, a single proof point, and a clear reason why this beats the usual alternatives.`,
-      cta: 'Open the product page to see how it works.',
-    },
-    {
-      id: 'fomo',
-      style: 'FOMO',
-      hook: `This is the product everyone keeps saving before it sells out again.`,
-      body: `Use urgency, social proof, and a quick result clip. ${name} works best in this format when the edit feels fast, direct, and highly visual from the first second.`,
-      cta: 'Check availability before the current batch is gone.',
-    },
-  ];
-}
-
-function buildDraftText(productBrief: ProductBriefDraft, scripts: ScriptDraft[], selectedIds: string[]) {
-  const selectedScripts = scripts.filter((item) => selectedIds.includes(item.id));
-  const scriptStyles = selectedScripts.map((item) => item.style).join(', ');
-  const sections = [
-    productBrief.productName ? `Product: ${productBrief.productName}` : null,
-    productBrief.productDescription ? `Description: ${productBrief.productDescription}` : null,
-    productBrief.sellingPoints ? `Selling points: ${productBrief.sellingPoints}` : null,
-    productBrief.targetAudience ? `Audience: ${productBrief.targetAudience}` : null,
-    productBrief.productUrl ? `Product URL: ${productBrief.productUrl}` : null,
-    productBrief.promotionalPricingEnabled && productBrief.originalPrice ? `Original price: ${productBrief.originalPrice}` : null,
-    productBrief.promotionalPricingEnabled && productBrief.salePrice ? `Sale price: ${productBrief.salePrice}` : null,
-    productBrief.promotionalPricingEnabled && productBrief.promoDescription ? `Promo note: ${productBrief.promoDescription}` : null,
-    scriptStyles ? `Preferred script styles: ${scriptStyles}` : null,
-  ].filter(Boolean);
-
-  return sections.join('\n');
+function mapGeneratedScripts(items: GeneratedScriptApiItem[]): ScriptDraft[] {
+  return items.map((item) => ({
+    id: item.id,
+    style: item.styleLabel as ScriptStyle,
+    hook: item.hookText,
+    body: item.bodyText,
+    cta: item.ctaText,
+    originalHook: item.hookText,
+    originalBody: item.bodyText,
+    originalCta: item.ctaText,
+  }));
 }
 
 function formatBytes(value: string) {
@@ -876,7 +855,7 @@ function SettingsStep({
 }
 
 function ScriptsStep({
-  productName,
+  projectId,
   scripts,
   selectedIds,
   onChangeScripts,
@@ -884,7 +863,7 @@ function ScriptsStep({
   onBack,
   onNext,
 }: {
-  productName: string;
+  projectId: string | null;
   scripts: ScriptDraft[];
   selectedIds: string[];
   onChangeScripts: (next: ScriptDraft[]) => void;
@@ -897,28 +876,56 @@ function ScriptsStep({
   const [editDraft, setEditDraft] = useState<Partial<ScriptDraft>>({});
 
   useEffect(() => {
-    if (scripts.length > 0) return;
+    if (!projectId || scripts.length > 0) return;
 
+    let cancelled = false;
     setIsGenerating(true);
-    const timer = window.setTimeout(() => {
-      const generated = generateMockScripts(productName);
-      onChangeScripts(generated);
-      onChangeSelectedIds(generated.map((item) => item.id));
-      setIsGenerating(false);
-    }, 900);
+    void (async () => {
+      try {
+        const generatedResult = (await Api.generateProjectScripts(projectId, { overwrite: true })) as {
+          scripts?: GeneratedScriptApiItem[];
+        };
+        if (cancelled) return;
+        const generatedScripts = mapGeneratedScripts(Array.isArray(generatedResult?.scripts) ? generatedResult.scripts : []);
+        onChangeScripts(generatedScripts);
+        onChangeSelectedIds(generatedScripts.map((item) => item.id));
+      } catch (error: any) {
+        const message = error?.error?.message || 'Failed to generate scripts.';
+        toast.error(message);
+      } finally {
+        if (!cancelled) {
+          setIsGenerating(false);
+        }
+      }
+    })();
 
-    return () => window.clearTimeout(timer);
-  }, [productName, scripts.length, onChangeScripts, onChangeSelectedIds]);
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, scripts.length, onChangeScripts, onChangeSelectedIds]);
 
   function handleRegenerate() {
+    if (!projectId) {
+      toast.error('Project is not ready for script generation yet.');
+      return;
+    }
     setEditingId(null);
     setIsGenerating(true);
-    window.setTimeout(() => {
-      const generated = generateMockScripts(productName);
-      onChangeScripts(generated);
-      onChangeSelectedIds(generated.map((item) => item.id));
-      setIsGenerating(false);
-    }, 900);
+    void (async () => {
+      try {
+        const generatedResult = (await Api.generateProjectScripts(projectId, { overwrite: true })) as {
+          scripts?: GeneratedScriptApiItem[];
+        };
+        const generatedScripts = mapGeneratedScripts(Array.isArray(generatedResult?.scripts) ? generatedResult.scripts : []);
+        onChangeScripts(generatedScripts);
+        onChangeSelectedIds(generatedScripts.map((item) => item.id));
+      } catch (error: any) {
+        const message = error?.error?.message || 'Failed to regenerate scripts.';
+        toast.error(message);
+      } finally {
+        setIsGenerating(false);
+      }
+    })();
   }
 
   function toggleSelected(id: string) {
@@ -950,9 +957,21 @@ function ScriptsStep({
   }
 
   function resetScript(id: string) {
-    const replacement = generateMockScripts(productName).find((item) => item.id === id);
+    const replacement = scripts.find((item) => item.id === id);
     if (!replacement) return;
-    onChangeScripts(scripts.map((item) => (item.id === id ? replacement : item)));
+    onChangeScripts(
+      scripts.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              hook: item.originalHook,
+              body: item.originalBody,
+              cta: item.originalCta,
+              edited: false,
+            }
+          : item,
+      ),
+    );
     setEditingId(null);
   }
 
@@ -976,6 +995,15 @@ function ScriptsStep({
     >
       {isGenerating ? (
         <div className="space-y-4">
+          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 px-5 py-4">
+            <div className="flex items-center gap-3 text-sm text-zinc-200">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-300" />
+              <span>Your scripts are being generated.</span>
+            </div>
+            <div className="mt-2 text-sm text-zinc-500">
+              This usually takes a few seconds while we prepare script variants from your product details.
+            </div>
+          </div>
           {[1, 2, 3].map((item) => (
             <div key={item} className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 animate-pulse">
               <div className="h-5 w-32 rounded bg-zinc-800" />
@@ -1317,6 +1345,8 @@ function RenderStep({
 export function CreateVideoTaskShell() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState<StepId>(1);
+  const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
+  const [bootstrappingProject, setBootstrappingProject] = useState(false);
   const [productBriefDraft, setProductBriefDraft] = useState<ProductBriefDraft>({
     productName: '',
     productDescription: '',
@@ -1340,6 +1370,41 @@ export function CreateVideoTaskShell() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [localUploadDrafts, setLocalUploadDrafts] = useState<LocalUploadItem[]>([]);
   const [submittingRender, setSubmittingRender] = useState(false);
+
+  async function createDraftProjectIfNeeded() {
+    if (draftProjectId) return draftProjectId;
+
+    const created = await Api.createProject({
+      name: productBriefDraft.productName.trim().slice(0, 120),
+      productName: productBriefDraft.productName.trim(),
+      productDescription: productBriefDraft.productDescription.trim(),
+      sellingPoints: productBriefDraft.sellingPoints.trim(),
+      targetAudience: productBriefDraft.targetAudience.trim(),
+      durationSeconds: settingsDraft.duration,
+      language: settingsDraft.language,
+      aspectRatio:
+        settingsDraft.aspectRatio === '9:16'
+          ? 'vertical_9_16'
+          : settingsDraft.aspectRatio === '1:1'
+            ? 'square_1_1'
+            : 'landscape_16_9',
+    });
+
+    setDraftProjectId(created.id);
+
+    if (productBriefDraft.promotionalPricingEnabled) {
+      await Api.updateProject(created.id, {
+        promoEnabled: true,
+        promoInfo: {
+          originalPrice: productBriefDraft.originalPrice.trim(),
+          salePrice: productBriefDraft.salePrice.trim(),
+          discountLabel: productBriefDraft.promoDescription.trim(),
+        },
+      });
+    }
+
+    return created.id;
+  }
 
   function validateStep(step: StepId) {
     if (step === 1) {
@@ -1382,8 +1447,27 @@ export function CreateVideoTaskShell() {
     return true;
   }
 
-  function goToStep(nextStep: StepId) {
-    if (nextStep > currentStep && !validateStep(currentStep)) return;
+  async function goToStep(nextStep: StepId) {
+    if (nextStep > currentStep) {
+      for (let step = currentStep; step < nextStep; step += 1) {
+        if (!validateStep(step as StepId)) return;
+      }
+    }
+
+    if (nextStep === 4 && !draftProjectId) {
+      if (bootstrappingProject) return;
+      setBootstrappingProject(true);
+      try {
+        await createDraftProjectIfNeeded();
+      } catch (error: any) {
+        const message = error?.error?.message || 'Failed to prepare the draft project.';
+        toast.error(message);
+        return;
+      } finally {
+        setBootstrappingProject(false);
+      }
+    }
+
     setCurrentStep(nextStep);
   }
 
@@ -1407,121 +1491,46 @@ export function CreateVideoTaskShell() {
     }
 
     setSubmittingRender(true);
-    const draftText = buildDraftText(productBriefDraft, scriptDrafts, selectedScriptIds);
-    const primaryScript = scriptDrafts.find((item) => selectedScriptIds.includes(item.id)) ?? scriptDrafts[0] ?? null;
-    const projectName = productBriefDraft.productName.trim().slice(0, 120);
 
     try {
-      const created = await Api.createProject({
-        name: projectName,
-        productName: productBriefDraft.productName.trim(),
-        productDescription: productBriefDraft.productDescription.trim(),
-        sellingPoints: productBriefDraft.sellingPoints.trim(),
-        targetAudience: productBriefDraft.targetAudience.trim(),
-        durationSeconds: settingsDraft.duration,
-        language: settingsDraft.language,
-        aspectRatio:
-          settingsDraft.aspectRatio === '9:16'
-            ? 'vertical_9_16'
-            : settingsDraft.aspectRatio === '1:1'
-              ? 'square_1_1'
-              : 'landscape_16_9',
+      const projectId = draftProjectId ?? (await createDraftProjectIfNeeded());
+
+      await Api.importProjectAssets(projectId, selectedAssetIds);
+      await Api.updateProject(projectId, {
+        selectedAssetIds,
+        promoEnabled: productBriefDraft.promotionalPricingEnabled,
+        promoInfo: productBriefDraft.promotionalPricingEnabled
+          ? {
+              originalPrice: productBriefDraft.originalPrice.trim(),
+              salePrice: productBriefDraft.salePrice.trim(),
+              discountLabel: productBriefDraft.promoDescription.trim(),
+            }
+          : undefined,
+        renderOptions: {
+          captionsEnabled: true,
+          backgroundMusicEnabled: settingsDraft.music !== 'none',
+          stylePreset: 'balanced',
+          useHookClip: true,
+          animateImages: true,
+          shuffleVideoSlices: true,
+        },
       });
 
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('project:updated', {
-            detail: {
-              id: created.id,
-              status: 'generating',
-              title: created.title,
-            },
-          }),
-        );
-        window.dispatchEvent(
-          new CustomEvent('project:created', {
-            detail: {
-              ...created,
-              status: 'generating',
-            },
-          }),
-        );
+      for (const script of scriptDrafts) {
+        await Api.updateProjectScript(projectId, script.id, {
+          styleLabel: script.style,
+          hookText: script.hook,
+          bodyText: script.body,
+          ctaText: script.cta,
+          isSelected: selectedScriptIds.includes(script.id),
+        });
       }
+
+      await Api.createVideoJobs(projectId, { overwrite: true });
+      await Api.processVideoJobs(projectId);
 
       toast.success('Task created. Rendering started.');
       router.push('/workspace/projects');
-
-      void (async () => {
-        try {
-          await Api.importProjectAssets(created.id, selectedAssetIds);
-          await Api.updateProject(created.id, {
-            renderOptions: {
-              captionsEnabled: true,
-              backgroundMusicEnabled: settingsDraft.music !== 'none',
-              stylePreset: 'balanced',
-              useHookClip: true,
-              animateImages: true,
-              shuffleVideoSlices: true,
-            },
-          });
-
-          const generatedResult = await Api.generateProjectScripts(created.id, { overwrite: true }) as {
-            scripts?: Array<{
-              id: string;
-              styleLabel: string;
-              hookText: string;
-              bodyText: string;
-              ctaText: string;
-              isSelected: boolean;
-            }>;
-          };
-
-          const generatedScripts = Array.isArray(generatedResult?.scripts) ? generatedResult.scripts : [];
-          for (const generatedScript of generatedScripts) {
-            const localScript =
-              scriptDrafts.find((item) => item.style === generatedScript.styleLabel) ??
-              scriptDrafts.find((item) => item.style.toLowerCase() === generatedScript.styleLabel.toLowerCase());
-
-            if (!localScript) continue;
-
-            await Api.updateProjectScript(created.id, generatedScript.id, {
-              styleLabel: generatedScript.styleLabel,
-              hookText: localScript.hook,
-              bodyText: localScript.body,
-              ctaText: localScript.cta,
-              isSelected: selectedScriptIds.includes(localScript.id),
-            });
-          }
-
-          await Api.createVideoJobs(created.id, { overwrite: true });
-          await Api.processVideoJobs(created.id);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('project:updated', {
-                detail: {
-                  id: created.id,
-                  status: 'generating',
-                  title: created.title,
-                },
-              }),
-            );
-          }
-        } catch (error: any) {
-          const message = error?.error?.message || 'Project was created, but render startup needs attention.';
-          toast.error(message);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('project:updated', {
-                detail: {
-                  id: created.id,
-                  status: 'draft',
-                  title: created.title,
-                },
-              }),
-            );
-          }
-        }
-      })();
     } catch (error: any) {
       const message = error?.error?.message || 'The project was not fully started. Please review the project in workspace.';
       toast.error(message);
@@ -1575,7 +1584,7 @@ export function CreateVideoTaskShell() {
 
           {currentStep === 4 ? (
             <ScriptsStep
-              productName={productBriefDraft.productName}
+              projectId={draftProjectId}
               scripts={scriptDrafts}
               selectedIds={selectedScriptIds}
               onChangeScripts={setScriptDrafts}
