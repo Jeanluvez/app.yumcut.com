@@ -61,45 +61,42 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
     return conflict('Active video jobs already exist for this project');
   }
 
-  const jobs = await prisma.$transaction(async (tx) => {
-    if (project.videoJobs.length > 0) {
-      await tx.videoJob.deleteMany({ where: { projectId: project.id } });
-    }
+  if (project.videoJobs.length > 0) {
+    await prisma.videoJob.deleteMany({ where: { projectId: project.id } });
+  }
 
-    const created = await Promise.all(
-      project.scripts.map((script, index) =>
-        tx.videoJob.create({
-          data: {
-            projectId: project.id,
-            scriptId: script.id,
-            variantIndex: index + 1,
-            status: 'pending',
-          },
-          select: {
-            id: true,
-            scriptId: true,
-            variantIndex: true,
-            status: true,
-            retryCount: true,
-            errorMessage: true,
-            createdAt: true,
-            script: {
-              select: {
-                styleLabel: true,
-                sortOrder: true,
-              },
-            },
-          },
-        }),
-      ),
-    );
+  await prisma.videoJob.createMany({
+    data: project.scripts.map((script, index) => ({
+      projectId: project.id,
+      scriptId: script.id,
+      variantIndex: index + 1,
+      status: 'pending' as const,
+    })),
+  });
 
-    await tx.project.update({
-      where: { id: project.id },
-      data: { status: 'generating' },
-    });
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { status: 'generating' },
+  });
 
-    return created;
+  const jobs = await prisma.videoJob.findMany({
+    where: { projectId: project.id },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      scriptId: true,
+      variantIndex: true,
+      status: true,
+      retryCount: true,
+      errorMessage: true,
+      createdAt: true,
+      script: {
+        select: {
+          styleLabel: true,
+          sortOrder: true,
+        },
+      },
+    },
   });
 
   return ok({

@@ -311,7 +311,7 @@ function MediaStep({
     };
   }, []);
 
-  const libraryAssets = assets.filter((item) => item.type !== 'hook').slice(0, 9);
+  const libraryAssets = assets.filter((item) => item.type !== 'hook');
   function toggleAsset(id: string) {
     onChangeSelectedIds(selectedIds.includes(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id]);
   }
@@ -1396,7 +1396,7 @@ export function CreateVideoTaskShell() {
   const [submittingRender, setSubmittingRender] = useState(false);
 
   const pendingLocalUploads = localUploadDrafts.filter((item) => !item.assetId);
-  const selectedMediaCount = selectedAssetIds.length + pendingLocalUploads.length;
+  const selectedMediaCount = selectedAssetIds.length + localUploadDrafts.length;
 
   async function createDraftProjectIfNeeded() {
     if (draftProjectId) return draftProjectId;
@@ -1643,7 +1643,7 @@ export function CreateVideoTaskShell() {
             <MediaStep
               selectedIds={selectedAssetIds}
               localUploads={localUploadDrafts}
-              selectedCount={selectedAssetIds.length}
+              selectedCount={selectedMediaCount}
               onChangeSelectedIds={setSelectedAssetIds}
               onChangeLocalUploads={setLocalUploadDrafts}
               onRemoveLocalUpload={removeLocalUpload}
