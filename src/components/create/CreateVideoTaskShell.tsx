@@ -23,6 +23,7 @@ import {
   Mic,
 } from 'lucide-react';
 import { Api } from '@/lib/api-client';
+import { Tooltip } from '@/components/common/Tooltip';
 import { MediaThumbnail } from '@/components/media/MediaThumbnail';
 import { toast } from 'sonner';
 
@@ -59,6 +60,11 @@ type LocalUploadItem = {
   assetId?: string;
 };
 
+type SampleProductBrief = Pick<
+  ProductBriefDraft,
+  'productName' | 'productDescription' | 'sellingPoints' | 'targetAudience'
+>;
+
 function countWords(value: string) {
   return value
     .trim()
@@ -80,6 +86,29 @@ function validateProductBriefDraft(draft: ProductBriefDraft) {
     return 'Product description and key selling points must each be at least 10 words.';
   }
   return null;
+}
+
+function parseSampleProductBrief(markdown: string): SampleProductBrief {
+  const normalized = markdown.replace(/\r\n/g, '\n');
+
+  function extractSection(label: string) {
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = normalized.match(new RegExp(`${escapedLabel}:\\n([\\s\\S]*?)(?:\\n\\n[A-Za-z][^\\n]*:|$)`));
+    if (!match) return '';
+
+    return match[1]
+      .split('\n')
+      .map((line) => line.replace(/^\*\s*/, '').trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  return {
+    productName: extractSection('Name'),
+    productDescription: extractSection('Description'),
+    sellingPoints: extractSection('Key Selling Points'),
+    targetAudience: extractSection('Target Audience'),
+  };
 }
 
 type ProductBriefDraft = {
@@ -329,6 +358,8 @@ function MediaStep({
   selectedIds,
   localUploads,
   selectedCount,
+  isLoadingSample,
+  onLoadSample,
   onChangeSelectedIds,
   onChangeLocalUploads,
   onRemoveLocalUpload,
@@ -337,6 +368,8 @@ function MediaStep({
   selectedIds: string[];
   localUploads: LocalUploadItem[];
   selectedCount: number;
+  isLoadingSample: boolean;
+  onLoadSample: () => void;
   onChangeSelectedIds: (next: string[]) => void;
   onChangeLocalUploads: (next: LocalUploadItem[]) => void;
   onRemoveLocalUpload: (id: string, assetId?: string) => void;
@@ -440,13 +473,33 @@ function MediaStep({
               My Assets ({assets.length})
             </button>
           </div>
-          <div className="hidden items-center gap-4 text-xs sm:flex">
-            <span className="text-zinc-500">
-              <span className="font-semibold text-blue-300">{localUploads.length}</span> local files
-            </span>
-            <span className="text-zinc-500">
-              <span className="font-semibold text-blue-300">{selectedCount}</span> selected assets
-            </span>
+          <div className="ml-auto flex flex-col items-end gap-2">
+            <Tooltip
+              content="Instantly load demo media and pre-filled product details so you can explore the full workflow faster."
+              side="bottom"
+              align="end"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('upload');
+                  onLoadSample();
+                }}
+                disabled={isLoadingSample}
+                className="inline-flex items-center gap-2 rounded-xl border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-100 transition hover:border-blue-300/30 hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoadingSample ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                <span>{isLoadingSample ? 'Loading sample...' : 'Try a Sample Setup'}</span>
+              </button>
+            </Tooltip>
+            <div className="hidden items-center justify-end gap-4 text-xs sm:flex">
+              <span className="text-zinc-500">
+                <span className="font-semibold text-blue-300">{localUploads.length}</span> local files
+              </span>
+              <span className="text-zinc-500">
+                <span className="font-semibold text-blue-300">{selectedCount}</span> selected assets
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1493,6 +1546,7 @@ export function CreateVideoTaskShell() {
   const [submittingRender, setSubmittingRender] = useState(false);
   const [scriptsLoadedForProjectId, setScriptsLoadedForProjectId] = useState<string | null>(null);
   const [showFreePlanWatermarkNotice, setShowFreePlanWatermarkNotice] = useState(true);
+  const [loadingSampleSetup, setLoadingSampleSetup] = useState(false);
 
   const selectedMediaCount = selectedAssetIds.length + localUploadDrafts.length;
 
@@ -1616,6 +1670,71 @@ export function CreateVideoTaskShell() {
     setLocalUploadDrafts((prev) => prev.filter((item) => item.id !== id));
     if (assetId) {
       setSelectedAssetIds((prev) => prev.filter((item) => item !== assetId));
+    }
+  }
+
+  async function loadSampleSetup() {
+    if (loadingSampleSetup) return;
+
+    setLoadingSampleSetup(true);
+    try {
+      const sampleDefinitions = [
+        { url: '/characters/rhode1.png', filename: 'test1.png', kind: 'image' as const, mimeType: 'image/png' },
+        { url: '/characters/rhode2.mp4', filename: 'test2.mp4', kind: 'video' as const, mimeType: 'video/mp4' },
+        { url: '/characters/rhode4.mp4', filename: 'test3.mp4', kind: 'video' as const, mimeType: 'video/mp4' },
+      ];
+
+      const [sampleFiles, sampleBriefResponse] = await Promise.all([
+        Promise.all(
+          sampleDefinitions.map(async (sample, index) => {
+            const response = await fetch(sample.url);
+            if (!response.ok) {
+              throw new Error(`Could not load ${sample.filename}`);
+            }
+            const blob = await response.blob();
+            const file = new File([blob], sample.filename, {
+              type: blob.type || sample.mimeType,
+            });
+
+            return {
+              id: `sample-${index + 1}`,
+              name: sample.filename,
+              size: formatBytes(String(file.size)),
+              kind: sample.kind,
+              file,
+            } as LocalUploadItem;
+          }),
+        ),
+        fetch('/characters/rhode-test.md'),
+      ]);
+
+      if (!sampleBriefResponse.ok) {
+        throw new Error('Could not load sample product details');
+      }
+
+      const sampleBriefMarkdown = await sampleBriefResponse.text();
+      const parsedBrief = parseSampleProductBrief(sampleBriefMarkdown);
+
+      draftProjectPromiseRef.current = null;
+      setDraftProjectId(null);
+      setScriptDrafts([]);
+      setSelectedScriptIds([]);
+      setScriptsLoadedForProjectId(null);
+      setLocalUploadDrafts(sampleFiles);
+      setSelectedAssetIds([]);
+      setProductBriefDraft((prev) => ({
+        ...prev,
+        productName: parsedBrief.productName,
+        productDescription: parsedBrief.productDescription,
+        sellingPoints: parsedBrief.sellingPoints,
+        targetAudience: parsedBrief.targetAudience,
+      }));
+
+      toast.success('Sample setup loaded. Demo media and product details are ready.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to load the sample setup.');
+    } finally {
+      setLoadingSampleSetup(false);
     }
   }
 
@@ -1779,6 +1898,8 @@ export function CreateVideoTaskShell() {
               selectedIds={selectedAssetIds}
               localUploads={localUploadDrafts}
               selectedCount={selectedAssetIds.length}
+              isLoadingSample={loadingSampleSetup}
+              onLoadSample={() => void loadSampleSetup()}
               onChangeSelectedIds={setSelectedAssetIds}
               onChangeLocalUploads={setLocalUploadDrafts}
               onRemoveLocalUpload={removeLocalUpload}
