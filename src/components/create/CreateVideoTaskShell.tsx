@@ -26,6 +26,8 @@ import { Api } from '@/lib/api-client';
 import { MediaThumbnail } from '@/components/media/MediaThumbnail';
 import { toast } from 'sonner';
 
+const PENDING_PROJECT_STORAGE_KEY = 'sprokl:pending-project-preview';
+
 type StepId = 1 | 2 | 3 | 4 | 5;
 
 type AssetItem = {
@@ -56,6 +58,29 @@ type LocalUploadItem = {
   file: File;
   assetId?: string;
 };
+
+function countWords(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean).length;
+}
+
+function validateProductBriefDraft(draft: ProductBriefDraft) {
+  if (
+    !draft.productName.trim() ||
+    !draft.productDescription.trim() ||
+    !draft.sellingPoints.trim() ||
+    !draft.targetAudience.trim()
+  ) {
+    return 'Complete all required product details before continuing.';
+  }
+  if (countWords(draft.productDescription) < 10 || countWords(draft.sellingPoints) < 10) {
+    return 'Product description and key selling points must each be at least 10 words.';
+  }
+  return null;
+}
 
 type ProductBriefDraft = {
   productName: string;
@@ -262,6 +287,44 @@ function StepPanel({
   );
 }
 
+function InlinePagination({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
+      <div className="text-xs font-medium text-zinc-500">
+        Page {page} of {totalPages}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MediaStep({
   selectedIds,
   localUploads,
@@ -282,6 +345,7 @@ function MediaStep({
   const [activeTab, setActiveTab] = useState<'library' | 'upload'>('upload');
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [libraryPage, setLibraryPage] = useState(1);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -313,6 +377,22 @@ function MediaStep({
   }, []);
 
   const libraryAssets = assets.filter((item) => item.type !== 'hook');
+  const totalLibraryPages = Math.max(1, Math.ceil(libraryAssets.length / 9));
+  const paginatedLibraryAssets = libraryAssets.slice((libraryPage - 1) * 9, (libraryPage - 1) * 9 + 9);
+
+  useEffect(() => {
+    if (activeTab !== 'library') return;
+    if (libraryPage > totalLibraryPages) {
+      setLibraryPage(totalLibraryPages);
+    }
+  }, [activeTab, libraryPage, totalLibraryPages]);
+
+  useEffect(() => {
+    if (activeTab === 'library') {
+      setLibraryPage(1);
+    }
+  }, [activeTab]);
+
   function toggleAsset(id: string) {
     onChangeSelectedIds(selectedIds.includes(id) ? selectedIds.filter((item) => item !== id) : [...selectedIds, id]);
   }
@@ -365,7 +445,7 @@ function MediaStep({
               <span className="font-semibold text-blue-300">{localUploads.length}</span> local files
             </span>
             <span className="text-zinc-500">
-              <span className="font-semibold text-blue-300">{selectedCount}</span> selected
+              <span className="font-semibold text-blue-300">{selectedCount}</span> selected assets
             </span>
           </div>
         </div>
@@ -380,8 +460,9 @@ function MediaStep({
                 </div>
               </div>
             ) : libraryAssets.length > 0 ? (
+              <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {libraryAssets.map((asset) => {
+                {paginatedLibraryAssets.map((asset) => {
                   const isSelected = selectedIds.includes(asset.id);
                   const isVideo = asset.mimeType.startsWith('video') || asset.type === 'video';
                   const previewUrl = asset.thumbnailUrl || asset.storageUrl;
@@ -396,7 +477,7 @@ function MediaStep({
                           ? 'border-blue-400/50 ring-1 ring-blue-400/30 bg-blue-500/10'
                           : 'border-zinc-700/70 bg-zinc-900 hover:border-zinc-600'
                       }`}
-                    >
+                      >
                       <div className="relative h-32 bg-zinc-800/80">
                         {previewUrl ? (
                           <MediaThumbnail
@@ -404,8 +485,8 @@ function MediaStep({
                             src={isVideo ? asset.storageUrl : previewUrl}
                             poster={isVideo ? asset.thumbnailUrl : null}
                             alt={asset.filename}
-                            iconClassName="h-6 w-6 text-zinc-600"
                             className="h-full w-full object-cover"
+                            iconClassName="h-6 w-6 text-zinc-600"
                           />
                         ) : (
                           <div className="flex h-full items-center justify-center">
@@ -434,6 +515,8 @@ function MediaStep({
                   );
                 })}
               </div>
+              <InlinePagination page={libraryPage} totalPages={totalLibraryPages} onPageChange={setLibraryPage} />
+              </>
             ) : (
               <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 p-8 text-center">
                 <p className="text-base font-semibold text-white">No media assets yet</p>
@@ -671,7 +754,14 @@ function ProductBriefStep({
           </button>
           <button
             type="button"
-            onClick={onNext}
+            onClick={() => {
+              const errorMessage = validateProductBriefDraft(draft);
+              if (errorMessage) {
+                toast.error(errorMessage);
+                return;
+              }
+              onNext();
+            }}
             className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
           >
             Continue to Video Settings
@@ -877,6 +967,8 @@ function ScriptsStep({
   onBack,
   onNext,
   isBootstrapping,
+  scriptsLoadedForProjectId,
+  onScriptsReady,
 }: {
   projectId: string | null;
   scripts: ScriptDraft[];
@@ -886,15 +978,22 @@ function ScriptsStep({
   onBack: () => void;
   onNext: () => void;
   isBootstrapping: boolean;
+  scriptsLoadedForProjectId: string | null;
+  onScriptsReady: (projectId: string | null) => void;
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<ScriptDraft>>({});
+  const autoGenerateProjectIdRef = useRef<string | null>(null);
+  const isLoadingScripts =
+    isBootstrapping || isGenerating || !projectId || scriptsLoadedForProjectId !== projectId || scripts.length === 0;
 
   useEffect(() => {
     if (!projectId || scripts.length > 0) return;
+    if (autoGenerateProjectIdRef.current === projectId) return;
 
     let cancelled = false;
+    autoGenerateProjectIdRef.current = projectId;
     setIsGenerating(true);
     void (async () => {
       try {
@@ -905,7 +1004,11 @@ function ScriptsStep({
         const generatedScripts = mapGeneratedScripts(Array.isArray(generatedResult?.scripts) ? generatedResult.scripts : []);
         onChangeScripts(generatedScripts);
         onChangeSelectedIds(generatedScripts.map((item) => item.id));
+        onScriptsReady(projectId);
       } catch (error: any) {
+        if (!cancelled && autoGenerateProjectIdRef.current === projectId) {
+          autoGenerateProjectIdRef.current = null;
+        }
         const message = error?.error?.message || 'Failed to generate scripts.';
         toast.error(message);
       } finally {
@@ -918,13 +1021,14 @@ function ScriptsStep({
     return () => {
       cancelled = true;
     };
-  }, [projectId, scripts.length, onChangeScripts, onChangeSelectedIds]);
+  }, [projectId, scripts.length, onChangeScripts, onChangeSelectedIds, onScriptsReady]);
 
   function handleRegenerate() {
     if (!projectId) {
       toast.error('Project is not ready for script generation yet.');
       return;
     }
+    autoGenerateProjectIdRef.current = projectId;
     setEditingId(null);
     setIsGenerating(true);
     void (async () => {
@@ -935,6 +1039,7 @@ function ScriptsStep({
         const generatedScripts = mapGeneratedScripts(Array.isArray(generatedResult?.scripts) ? generatedResult.scripts : []);
         onChangeScripts(generatedScripts);
         onChangeSelectedIds(generatedScripts.map((item) => item.id));
+        onScriptsReady(projectId);
       } catch (error: any) {
         const message = error?.error?.message || 'Failed to regenerate scripts.';
         toast.error(message);
@@ -995,7 +1100,7 @@ function ScriptsStep({
     <StepPanel
       eyebrow="Step 04"
       description="Choose and refine the script variants you want to render."
-      headerActions={
+      headerActions={!isLoadingScripts ? (
         <button
           type="button"
           onClick={handleRegenerate}
@@ -1007,43 +1112,23 @@ function ScriptsStep({
             Regenerate
           </span>
         </button>
-      }
+      ) : null}
     >
-      {isBootstrapping && !projectId ? (
+      {isLoadingScripts ? (
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 px-5 py-5">
           <div className="flex items-center gap-3 text-sm text-zinc-200">
             <Loader2 className="h-4 w-4 animate-spin text-blue-300" />
-            <span>Preparing your script workspace.</span>
+            <span>{isBootstrapping ? 'Preparing your script workspace.' : 'Your scripts are being generated.'}</span>
           </div>
           <div className="mt-2 text-sm text-zinc-500">
-            We are creating the draft project and getting the script generation flow ready.
+            {isBootstrapping
+              ? 'We are creating the draft project and getting the script generation flow ready.'
+              : 'This usually takes a few seconds while we prepare script variants from your product details.'}
           </div>
         </div>
       ) : null}
 
-      {isGenerating ? (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900/70 px-5 py-4">
-            <div className="flex items-center gap-3 text-sm text-zinc-200">
-              <Loader2 className="h-4 w-4 animate-spin text-blue-300" />
-              <span>Your scripts are being generated.</span>
-            </div>
-            <div className="mt-2 text-sm text-zinc-500">
-              This usually takes a few seconds while we prepare script variants from your product details.
-            </div>
-          </div>
-          {[1, 2, 3].map((item) => (
-            <div key={item} className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 animate-pulse">
-              <div className="h-5 w-32 rounded bg-zinc-800" />
-              <div className="mt-4 h-4 rounded bg-zinc-800" />
-              <div className="mt-2 h-4 w-5/6 rounded bg-zinc-800" />
-              <div className="mt-2 h-4 w-3/4 rounded bg-zinc-800" />
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {!isGenerating ? (
+      {!isLoadingScripts ? (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             <p className="text-xs text-zinc-500">
@@ -1210,6 +1295,8 @@ function RenderStep({
   scripts,
   selectedIds,
   selectedAssetCount,
+  localUploadCount,
+  showFreePlanWatermarkNotice,
   submitting,
   onCreate,
   onBack,
@@ -1219,6 +1306,8 @@ function RenderStep({
   scripts: ScriptDraft[];
   selectedIds: string[];
   selectedAssetCount: number;
+  localUploadCount: number;
+  showFreePlanWatermarkNotice: boolean;
   submitting: boolean;
   onCreate: () => void;
   onBack: () => void;
@@ -1227,6 +1316,7 @@ function RenderStep({
   const selectedLanguage = LANGUAGES.find((item) => item.value === settings.language);
   const selectedVoice = VOICES.find((item) => item.value === settings.voice);
   const selectedMusic = MUSIC_OPTIONS.find((item) => item.value === settings.music);
+  const totalSelectedMediaCount = selectedAssetCount + localUploadCount;
 
   return (
     <StepPanel
@@ -1295,11 +1385,11 @@ function RenderStep({
             <span>Assets</span>
           </div>
           <div className="mt-4 text-2xl font-medium tracking-tight text-zinc-100">
-            {selectedAssetCount} media files selected
+            {totalSelectedMediaCount} media files selected
           </div>
           <div className="mt-3 text-sm leading-7 text-zinc-500">
-            {selectedAssetCount > 0
-              ? 'Selected assets from your library and uploads will be used to generate the final creative.'
+            {totalSelectedMediaCount > 0
+              ? `${selectedAssetCount} asset${selectedAssetCount === 1 ? '' : 's'} selected from your library and ${localUploadCount} local upload${localUploadCount === 1 ? '' : 's'} added for this render.`
               : 'No media files selected yet.'}
           </div>
         </div>
@@ -1340,12 +1430,14 @@ function RenderStep({
         </div>
       </div>
 
-      <div className="mt-5 rounded-3xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
-        <div className="text-sm font-medium text-amber-200">Free plan: Sprokl watermark included</div>
-        <div className="mt-1 text-sm leading-6 text-amber-300/90">
-          Videos on the Free plan include a Sprokl watermark in the bottom-right corner. Upgrade later to remove it.
+      {showFreePlanWatermarkNotice ? (
+        <div className="mt-5 rounded-3xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
+          <div className="text-sm font-medium text-amber-200">Free plan: Sprokl watermark included</div>
+          <div className="mt-1 text-sm leading-6 text-amber-300/90">
+            Videos on the Free plan include a Sprokl watermark in the bottom-right corner. Upgrade later to remove it.
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
@@ -1372,6 +1464,7 @@ function RenderStep({
 
 export function CreateVideoTaskShell() {
   const router = useRouter();
+  const draftProjectPromiseRef = useRef<Promise<string> | null>(null);
   const [currentStep, setCurrentStep] = useState<StepId>(1);
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
   const [bootstrappingProject, setBootstrappingProject] = useState(false);
@@ -1398,42 +1491,72 @@ export function CreateVideoTaskShell() {
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [localUploadDrafts, setLocalUploadDrafts] = useState<LocalUploadItem[]>([]);
   const [submittingRender, setSubmittingRender] = useState(false);
+  const [scriptsLoadedForProjectId, setScriptsLoadedForProjectId] = useState<string | null>(null);
+  const [showFreePlanWatermarkNotice, setShowFreePlanWatermarkNotice] = useState(true);
 
   const selectedMediaCount = selectedAssetIds.length + localUploadDrafts.length;
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void Api.getAssetSummary()
+      .then((summary) => {
+        if (cancelled) return;
+        setShowFreePlanWatermarkNotice(summary.plan === 'free');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setShowFreePlanWatermarkNotice(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   async function createDraftProjectIfNeeded() {
     if (draftProjectId) return draftProjectId;
+    if (draftProjectPromiseRef.current) return draftProjectPromiseRef.current;
 
-    const created = await Api.createProject({
-      name: productBriefDraft.productName.trim().slice(0, 120),
-      productName: productBriefDraft.productName.trim(),
-      productDescription: productBriefDraft.productDescription.trim(),
-      sellingPoints: productBriefDraft.sellingPoints.trim(),
-      targetAudience: productBriefDraft.targetAudience.trim(),
-      durationSeconds: settingsDraft.duration,
-      language: settingsDraft.language,
-      aspectRatio:
-        settingsDraft.aspectRatio === '9:16'
-          ? 'vertical_9_16'
-          : settingsDraft.aspectRatio === '1:1'
-            ? 'square_1_1'
-            : 'landscape_16_9',
-    });
-
-    setDraftProjectId(created.id);
-
-    if (productBriefDraft.promotionalPricingEnabled) {
-      await Api.updateProject(created.id, {
-        promoEnabled: true,
-        promoInfo: {
-          originalPrice: productBriefDraft.originalPrice.trim(),
-          salePrice: productBriefDraft.salePrice.trim(),
-          discountLabel: productBriefDraft.promoDescription.trim(),
-        },
+    draftProjectPromiseRef.current = (async () => {
+      const created = await Api.createProject({
+        name: productBriefDraft.productName.trim().slice(0, 120),
+        productName: productBriefDraft.productName.trim(),
+        productDescription: productBriefDraft.productDescription.trim(),
+        sellingPoints: productBriefDraft.sellingPoints.trim(),
+        targetAudience: productBriefDraft.targetAudience.trim(),
+        durationSeconds: settingsDraft.duration,
+        language: settingsDraft.language,
+        aspectRatio:
+          settingsDraft.aspectRatio === '9:16'
+            ? 'vertical_9_16'
+            : settingsDraft.aspectRatio === '1:1'
+              ? 'square_1_1'
+              : 'landscape_16_9',
       });
-    }
 
-    return created.id;
+      setDraftProjectId(created.id);
+
+      if (productBriefDraft.promotionalPricingEnabled) {
+        await Api.updateProject(created.id, {
+          promoEnabled: true,
+          promoInfo: {
+            originalPrice: productBriefDraft.originalPrice.trim(),
+            salePrice: productBriefDraft.salePrice.trim(),
+            discountLabel: productBriefDraft.promoDescription.trim(),
+          },
+        });
+      }
+
+      return created.id;
+    })();
+
+    try {
+      return await draftProjectPromiseRef.current;
+    } catch (error) {
+      draftProjectPromiseRef.current = null;
+      throw error;
+    }
   }
 
   async function uploadPendingLocalFiles(projectId: string) {
@@ -1462,13 +1585,9 @@ export function CreateVideoTaskShell() {
     }
 
     if (step === 2) {
-      if (
-        !productBriefDraft.productName.trim() ||
-        !productBriefDraft.productDescription.trim() ||
-        !productBriefDraft.sellingPoints.trim() ||
-        !productBriefDraft.targetAudience.trim()
-      ) {
-        toast.error('Complete all required product details before continuing.');
+      const errorMessage = validateProductBriefDraft(productBriefDraft);
+      if (errorMessage) {
+        toast.error(errorMessage);
         return false;
       }
       return true;
@@ -1552,27 +1671,25 @@ export function CreateVideoTaskShell() {
       const projectId = await createDraftProjectIfNeeded();
       const baseSelectedAssetIds = selectedAssetIds.slice();
       const baseScripts = scriptDrafts.map((script) => ({ ...script }));
+      const pendingProjectPreview = {
+        id: projectId,
+        title: productBriefDraft.productName.trim() || 'Untitled product',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
 
-      window.dispatchEvent(
-        new CustomEvent('project:created', {
-          detail: {
-            id: projectId,
-            title: productBriefDraft.productName.trim() || 'Untitled product',
-            status: 'generating',
-          },
-        }),
-      );
-      window.dispatchEvent(
-        new CustomEvent('project:updated', {
-          detail: {
-            id: projectId,
-            title: productBriefDraft.productName.trim() || 'Untitled product',
-            status: 'generating',
-          },
-        }),
-      );
+      if (typeof window !== 'undefined') {
+        try {
+          window.sessionStorage.setItem(PENDING_PROJECT_STORAGE_KEY, JSON.stringify(pendingProjectPreview));
+        } catch {}
+        window.dispatchEvent(
+          new CustomEvent('project:created', {
+            detail: pendingProjectPreview,
+          }),
+        );
+      }
 
-      toast.success('Task created. Rendering started.');
+      toast.success('Task created. You can track progress in Projects.');
       router.push('/workspace/projects');
 
       void (async () => {
@@ -1611,10 +1728,26 @@ export function CreateVideoTaskShell() {
           }
 
           await Api.createVideoJobs(projectId, { overwrite: true });
-          void Api.processVideoJobs(projectId).catch((error: any) => {
-            const message = error?.error?.message || 'Task was created, but rendering needs attention.';
-            toast.error(message);
-          });
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('project:created', {
+                detail: {
+                  id: projectId,
+                  title: productBriefDraft.productName.trim() || 'Untitled product',
+                  status: 'pending',
+                },
+              }),
+            );
+            window.dispatchEvent(
+              new CustomEvent('project:updated', {
+                detail: {
+                  id: projectId,
+                  title: productBriefDraft.productName.trim() || 'Untitled product',
+                  status: 'pending',
+                },
+              }),
+            );
+          }
         } catch (error: any) {
           const message = error?.error?.message || 'Task was created, but rendering needs attention.';
           toast.error(message);
@@ -1645,7 +1778,7 @@ export function CreateVideoTaskShell() {
             <MediaStep
               selectedIds={selectedAssetIds}
               localUploads={localUploadDrafts}
-              selectedCount={selectedMediaCount}
+              selectedCount={selectedAssetIds.length}
               onChangeSelectedIds={setSelectedAssetIds}
               onChangeLocalUploads={setLocalUploadDrafts}
               onRemoveLocalUpload={removeLocalUpload}
@@ -1654,11 +1787,18 @@ export function CreateVideoTaskShell() {
           ) : null}
 
           {currentStep === 2 ? (
-            <ProductBriefStep
+          <ProductBriefStep
               draft={productBriefDraft}
               onChange={setProductBriefDraft}
               onBack={() => setCurrentStep(1)}
-              onNext={() => goToStep(3)}
+              onNext={() => {
+                const errorMessage = validateProductBriefDraft(productBriefDraft);
+                if (errorMessage) {
+                  toast.error(errorMessage);
+                  return;
+                }
+                setCurrentStep(3);
+              }}
             />
           ) : null}
 
@@ -1681,6 +1821,8 @@ export function CreateVideoTaskShell() {
               onBack={() => setCurrentStep(3)}
               onNext={() => goToStep(5)}
               isBootstrapping={bootstrappingProject}
+              scriptsLoadedForProjectId={scriptsLoadedForProjectId}
+              onScriptsReady={setScriptsLoadedForProjectId}
             />
           ) : null}
 
@@ -1691,6 +1833,8 @@ export function CreateVideoTaskShell() {
               scripts={scriptDrafts}
               selectedIds={selectedScriptIds}
               selectedAssetCount={selectedAssetIds.length}
+              localUploadCount={localUploadDrafts.length}
+              showFreePlanWatermarkNotice={showFreePlanWatermarkNotice}
               submitting={submittingRender}
               onCreate={handleCreateFromWizard}
               onBack={() => setCurrentStep(4)}

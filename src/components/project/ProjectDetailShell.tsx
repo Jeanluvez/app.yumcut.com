@@ -344,10 +344,10 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
     setProcessingVideoJobs(true);
     try {
       await Api.processVideoJobs(projectId);
-      toast.success('Next pending job processed');
+      toast.success('Started processing the next pending video job');
       await loadProject();
     } catch (err: any) {
-      toast.error(err?.error?.message || 'Failed to process video jobs');
+      toast.error(err?.error?.message || 'Failed to process the next video job');
     } finally {
       setProcessingVideoJobs(false);
     }
@@ -1078,14 +1078,14 @@ export function ProjectDetailShell({ projectId }: { projectId: string }) {
             </div>
             <CardDescription className="text-zinc-400">
               {project.videoJobs.length === 0
-                ? 'Create one queued job per selected script.'
-                : `${project.videoJobs.length} queued jobs prepared for the rendering worker.`}
+                ? 'Create one pending job per selected script.'
+                : `${project.videoJobs.length} pending jobs are ready for the worker.`}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {project.videoJobs.length === 0 ? (
               <div className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-sm text-zinc-500">
-                Video job creation is ready. The next step is to enqueue one job per selected script.
+                Video job creation is ready. The next step is to queue one job per selected script.
               </div>
             ) : (
               <div className="space-y-3">

@@ -4,6 +4,7 @@ import { prisma } from '@/server/db';
 import { error, notFound, ok, unauthorized } from '@/server/http';
 import { withApiError } from '@/server/errors';
 import { z } from 'zod';
+import { deriveProjectDisplayStatus } from '@/shared/project-status';
 
 type Params = { projectId: string };
 
@@ -267,7 +268,10 @@ export const GET = withApiError(async function GET(req: NextRequest, { params }:
     durationSeconds: project.durationSeconds,
     aspectRatio: project.aspectRatio,
     language: project.language,
-    status: project.status,
+    status: deriveProjectDisplayStatus({
+      projectStatus: project.status,
+      videoJobs: project.videoJobs,
+    }),
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString(),
     counts: {

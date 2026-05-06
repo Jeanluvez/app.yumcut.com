@@ -2,6 +2,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Api } from '@/lib/api-client';
 import { toast } from 'sonner';
+import { normalizeProjectDisplayStatus } from '@/shared/project-status';
 
 type ProjectItem = any;
 
@@ -12,6 +13,61 @@ type ProjectsContextValue = {
 };
 
 const ProjectsContext = createContext<ProjectsContextValue | null>(null);
+const PENDING_PROJECT_STORAGE_KEY = 'sprokl:pending-project-preview';
+
+function readPendingProjectPreview() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_PROJECT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      id?: string;
+      title?: string;
+      status?: string;
+      createdAt?: string;
+    };
+    if (!parsed?.id) return null;
+
+    const createdAtMs = parsed.createdAt ? Date.parse(parsed.createdAt) : Number.NaN;
+    if (Number.isFinite(createdAtMs) && Date.now() - createdAtMs > 10 * 60 * 1000) {
+      window.sessionStorage.removeItem(PENDING_PROJECT_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      id: parsed.id,
+      title: parsed.title || 'Untitled project',
+      status: parsed.status || 'pending',
+      createdAt: parsed.createdAt || new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingProjectPreview(projectId?: string) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const raw = window.sessionStorage.getItem(PENDING_PROJECT_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { id?: string };
+    if (!projectId || parsed?.id === projectId) {
+      window.sessionStorage.removeItem(PENDING_PROJECT_STORAGE_KEY);
+    }
+  } catch {}
+}
+
+function mergePendingProjectPreview(items: ProjectItem[]) {
+  const pendingPreview = readPendingProjectPreview();
+  if (!pendingPreview) return items;
+  if (items.some((item) => item.id === pendingPreview.id)) {
+    clearPendingProjectPreview(pendingPreview.id);
+    return items;
+  }
+  return [pendingPreview, ...items];
+}
 
 export function ProjectsProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ProjectItem[]>([]);
@@ -22,8 +78,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(() => {
     setLoading(true);
     Api.getProjects()
-      .then((r: any) => setItems(Array.isArray(r) ? r : []))
-      .catch(() => setItems([]))
+      .then((r: any) => setItems(mergePendingProjectPreview(Array.isArray(r) ? r : [])))
+      .catch(() => setItems(mergePendingProjectPreview([])))
       .finally(() => setLoading(false));
   }, []);
 
@@ -38,16 +94,15 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
     if (hasInitialSnapshotRef.current) {
       items.forEach((item) => {
-        const before = (previous[item.id] ?? '').toLowerCase();
-        const after = (item.status ?? '').toLowerCase();
-        const wasGenerating =
-          before === 'generating' ||
-          before === 'scripts_generated' ||
-          before === 'pending' ||
-          before === 'processing' ||
-          before === 'queued';
-        const isDone = after === 'done' || after === 'completed' || after === 'ready';
-        const isFailed = after === 'failed' || after === 'error' || after === 'cancelled';
+        const previousStatus = previous[item.id];
+        if (typeof previousStatus !== 'string' || previousStatus.length === 0) {
+          return;
+        }
+        const before = normalizeProjectDisplayStatus(previousStatus);
+        const after = normalizeProjectDisplayStatus(item.status);
+        const wasGenerating = before === 'pending' || before === 'processing';
+        const isDone = after === 'done';
+        const isFailed = after === 'failed';
 
         if (wasGenerating && isDone) {
           toast.success(`${item.title || item.name || 'Your video'} is ready.`);
@@ -64,14 +119,8 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const hasActiveProjects = items.some((item) => {
-      const status = (item.status ?? '').toLowerCase();
-      return (
-        status === 'generating' ||
-        status === 'scripts_generated' ||
-        status === 'pending' ||
-        status === 'processing' ||
-        status === 'queued'
-      );
+      const status = normalizeProjectDisplayStatus(item.status);
+      return status === 'pending' || status === 'processing';
     });
 
     if (!hasActiveProjects) return;
@@ -88,12 +137,22 @@ export function ProjectsProvider({ children }: { children: React.ReactNode }) {
     function onDeleted(e: any) {
       const id = e?.detail?.projectId;
       if (!id) return;
+      clearPendingProjectPreview(id);
       setItems((prev) => prev.filter((it) => it.id !== id));
     }
     function onUpdated(e: any) {
       const { id, status, title } = e?.detail || {};
       if (!id) return;
-      setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: status ?? it.status, title: title ?? it.title } : it)));
+      setItems((prev) => {
+        if (prev.some((it) => it.id === id)) {
+          return prev.map((it) => (it.id === id ? { ...it, status: status ?? it.status, title: title ?? it.title } : it));
+        }
+        const pendingPreview = readPendingProjectPreview();
+        if (pendingPreview?.id === id) {
+          return [{ ...pendingPreview, status: status ?? pendingPreview.status, title: title ?? pendingPreview.title }, ...prev];
+        }
+        return prev;
+      });
     }
     function onCreated(e: any) {
       const item = e?.detail;

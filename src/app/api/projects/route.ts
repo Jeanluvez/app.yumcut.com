@@ -4,13 +4,21 @@ import { authenticateApiRequest } from '@/server/api-user';
 import { prisma } from '@/server/db';
 import { error, ok, unauthorized } from '@/server/http';
 import { createSproklProjectSchema } from '@/server/validators/projects';
+import { deriveProjectDisplayStatus } from '@/shared/project-status';
 
 export const GET = withApiError(async function GET(req: NextRequest) {
   const auth = await authenticateApiRequest(req);
   if (!auth) return unauthorized();
 
   const projects = await prisma.project.findMany({
-    where: { userId: auth.userId },
+    where: {
+      userId: auth.userId,
+      OR: [
+        { videoJobs: { some: {} } },
+        { videos: { some: {} } },
+        { status: { in: ['generating', 'done', 'failed'] } },
+      ],
+    },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -31,6 +39,11 @@ export const GET = withApiError(async function GET(req: NextRequest) {
           fileSizeBytes: true,
         },
       },
+      videoJobs: {
+        select: {
+          status: true,
+        },
+      },
     },
   });
 
@@ -38,7 +51,10 @@ export const GET = withApiError(async function GET(req: NextRequest) {
     projects.map((project) => ({
       id: project.id,
       title: project.name,
-      status: project.status,
+      status: deriveProjectDisplayStatus({
+        projectStatus: project.status,
+        videoJobs: project.videoJobs,
+      }),
       durationSeconds: project.durationSeconds,
       language: project.language,
       aspectRatio: project.aspectRatio,

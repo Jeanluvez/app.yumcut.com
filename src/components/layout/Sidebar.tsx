@@ -200,7 +200,7 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
               href="/create"
               title={open ? undefined : 'Create Task'}
               className={cn(
-                'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]',
+                'inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-violet-300/16 bg-[linear-gradient(135deg,rgba(56,189,248,0.16),rgba(96,165,250,0.22)_48%,rgba(139,92,246,0.18))] px-3 py-2.5 text-sm font-semibold text-blue-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_30px_rgba(37,99,235,0.16)] backdrop-blur-md transition-all duration-150 hover:border-violet-300/24 hover:bg-[linear-gradient(135deg,rgba(56,189,248,0.22),rgba(96,165,250,0.28)_48%,rgba(139,92,246,0.24))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_16px_36px_rgba(37,99,235,0.22)] active:scale-[0.98]',
                 !open && 'px-0',
               )}
             >
@@ -288,7 +288,7 @@ export function Sidebar({ initialOpen = true }: { initialOpen?: boolean }) {
             href="/create"
             title={open ? undefined : 'Create Task'}
             className={cn(
-              'inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]',
+              'inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-violet-300/16 bg-[linear-gradient(135deg,rgba(56,189,248,0.16),rgba(96,165,250,0.22)_48%,rgba(139,92,246,0.18))] px-3 py-2.5 text-sm font-semibold text-blue-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_12px_30px_rgba(37,99,235,0.16)] backdrop-blur-md transition-all duration-150 hover:border-violet-300/24 hover:bg-[linear-gradient(135deg,rgba(56,189,248,0.22),rgba(96,165,250,0.28)_48%,rgba(139,92,246,0.24))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_16px_36px_rgba(37,99,235,0.22)] active:scale-[0.98]',
               !open && 'px-0',
             )}
           >

@@ -19,6 +19,7 @@ import {
 import { Api } from '@/lib/api-client';
 import { useProjects } from '@/components/providers/ProjectsProvider';
 import { MediaThumbnail } from '@/components/media/MediaThumbnail';
+import { normalizeProjectDisplayStatus } from '@/shared/project-status';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -149,18 +150,18 @@ const initialForm: FormState = {
 };
 
 function getProjectStatusMeta(status: string | null | undefined) {
-  const normalized = (status ?? 'draft').toLowerCase();
+  const normalized = normalizeProjectDisplayStatus(status);
 
-  if (normalized === 'done' || normalized === 'completed') {
+  if (normalized === 'done') {
     return {
-      key: 'ready' as const,
-      label: 'Ready',
+      key: 'done' as const,
+      label: 'Done',
       badgeClass: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200',
       progress: null,
     };
   }
 
-  if (normalized === 'error' || normalized === 'failed' || normalized === 'cancelled') {
+  if (normalized === 'failed') {
     return {
       key: 'failed' as const,
       label: 'Failed',
@@ -169,35 +170,20 @@ function getProjectStatusMeta(status: string | null | undefined) {
     };
   }
 
-  if (normalized === 'draft' || normalized === 'new') {
+  if (normalized === 'pending') {
     return {
-      key: 'queued' as const,
-      label: 'Queued',
+      key: 'pending' as const,
+      label: 'Pending',
       badgeClass: 'border-zinc-700 bg-zinc-800/80 text-zinc-200',
       progress: null,
     };
   }
 
-  const progressMap: Record<string, number> = {
-    scripts_generated: 16,
-    process_script: 22,
-    process_script_validate: 30,
-    process_audio: 42,
-    process_audio_validate: 52,
-    process_transcription: 60,
-    process_metadata: 68,
-    process_captions_video: 76,
-    process_images_generation: 82,
-    process_video_parts_generation: 90,
-    process_video_main: 96,
-    generating: 96,
-  };
-
   return {
-    key: 'rendering' as const,
-    label: 'Rendering',
+    key: 'processing' as const,
+    label: 'Processing',
     badgeClass: 'border-blue-400/30 bg-blue-500/10 text-blue-200',
-    progress: progressMap[normalized] ?? 48,
+    progress: 56,
   };
 }
 
@@ -253,17 +239,60 @@ function formatProjectDate(value: string | null | undefined) {
 }
 
 function getProjectStatusText(statusKey: ReturnType<typeof getProjectStatusMeta>['key']) {
-  if (statusKey === 'queued') return 'Waiting to start';
-  if (statusKey === 'rendering') return 'Generating video';
+  if (statusKey === 'pending') return 'Waiting to start';
+  if (statusKey === 'processing') return 'Generating video';
   if (statusKey === 'failed') return 'Generation failed';
   return 'Ready to review';
 }
 
 function getProjectMenuActions(statusKey: ReturnType<typeof getProjectStatusMeta>['key'], hasVideo: boolean) {
-  if (statusKey === 'queued') return ['delete'] as const;
+  if (statusKey === 'pending') return ['delete'] as const;
+  if (statusKey === 'processing') return ['delete'] as const;
   if (statusKey === 'failed') return ['retry', 'delete'] as const;
-  if (statusKey === 'ready') return hasVideo ? (['view', 'download', 'delete'] as const) : (['view', 'delete'] as const);
+  if (statusKey === 'done') return hasVideo ? (['view', 'download', 'delete'] as const) : (['view', 'delete'] as const);
   return [] as const;
+}
+
+function PaginationControls({
+  page,
+  totalPages,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3">
+      <div className="text-xs font-medium text-zinc-500">
+        Page {page} of {totalPages}
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="rounded-xl border-zinc-700 bg-zinc-950 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-900"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="rounded-xl border-zinc-700 bg-zinc-950 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-900"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' | 'assets' }) {
@@ -282,9 +311,11 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
   const [videoToDelete, setVideoToDelete] = useState<VideoItem | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<AssetItem | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<ProjectItem | null>(null);
-  const [projectFilter, setProjectFilter] = useState<'all' | 'active' | 'queued' | 'ready' | 'failed'>('all');
+  const [projectFilter, setProjectFilter] = useState<'all' | 'active' | 'pending' | 'done' | 'failed'>('all');
   const [projectSearch, setProjectSearch] = useState('');
   const [projectSort, setProjectSort] = useState<'newest' | 'oldest'>('newest');
+  const [projectPage, setProjectPage] = useState(1);
+  const [assetPage, setAssetPage] = useState(1);
   const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [retryingProjectId, setRetryingProjectId] = useState<string | null>(null);
@@ -373,27 +404,14 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
 
     return (items as ProjectItem[])
       .filter((item) => {
-      const normalized = (item.status ?? '').toLowerCase();
+      const normalized = normalizeProjectDisplayStatus(item.status);
       const title = (item.title || item.name || 'Untitled project').toLowerCase();
       if (normalizedSearch && !title.includes(normalizedSearch)) return false;
       if (projectFilter === 'all') return true;
-      if (projectFilter === 'ready') return normalized === 'done' || normalized === 'completed';
-      if (projectFilter === 'failed') return normalized === 'error' || normalized === 'failed' || normalized === 'cancelled';
-      if (projectFilter === 'queued') return normalized === 'draft' || normalized === 'new';
-      return (
-        normalized === 'generating' ||
-        normalized === 'scripts_generated' ||
-        normalized === 'process_script' ||
-        normalized === 'process_script_validate' ||
-        normalized === 'process_audio' ||
-        normalized === 'process_audio_validate' ||
-        normalized === 'process_transcription' ||
-        normalized === 'process_metadata' ||
-        normalized === 'process_captions_video' ||
-        normalized === 'process_images_generation' ||
-        normalized === 'process_video_parts_generation' ||
-        normalized === 'process_video_main'
-      );
+      if (projectFilter === 'done') return normalized === 'done';
+      if (projectFilter === 'failed') return normalized === 'failed';
+      if (projectFilter === 'pending') return normalized === 'pending';
+      return normalized === 'pending' || normalized === 'processing';
     })
       .sort((a, b) => {
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -401,6 +419,16 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
         return projectSort === 'oldest' ? aTime - bTime : bTime - aTime;
       });
   }, [items, projectFilter, projectSearch, projectSort]);
+  const paginatedProjects = useMemo(() => {
+    const start = (projectPage - 1) * 20;
+    return filteredProjects.slice(start, start + 20);
+  }, [filteredProjects, projectPage]);
+  const totalProjectPages = Math.max(1, Math.ceil(filteredProjects.length / 20));
+  const paginatedAssetGroups = useMemo(() => {
+    const start = (assetPage - 1) * 20;
+    return groupedAssetProjects.slice(start, start + 20);
+  }, [groupedAssetProjects, assetPage]);
+  const totalAssetPages = Math.max(1, Math.ceil(groupedAssetProjects.length / 20));
   const publishQueueItems = useMemo<PublishQueueItem[]>(() => {
     return (items as ProjectItem[])
       .flatMap((project) =>
@@ -500,6 +528,26 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
   }, []);
 
   useEffect(() => {
+    setProjectPage(1);
+  }, [projectFilter, projectSearch, projectSort]);
+
+  useEffect(() => {
+    setAssetPage(1);
+  }, [assetFilter, assetSearch]);
+
+  useEffect(() => {
+    if (projectPage > totalProjectPages) {
+      setProjectPage(totalProjectPages);
+    }
+  }, [projectPage, totalProjectPages]);
+
+  useEffect(() => {
+    if (assetPage > totalAssetPages) {
+      setAssetPage(totalAssetPages);
+    }
+  }, [assetPage, totalAssetPages]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
     const channelOauth = url.searchParams.get('channelOauth');
@@ -549,19 +597,21 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
   }
 
   async function handleDeleteProject(projectId: string) {
+    setProjectToDelete(null);
+    setProjectMenuOpenId(null);
     setDeletingProjectId(projectId);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('project:deleted', { detail: { projectId } }));
+    }
     try {
       await Api.deleteProject(projectId);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('project:deleted', { detail: { projectId } }));
-      }
       toast.success('Project deleted');
       await Promise.all([refresh(), loadVideos(), loadAssets()]);
     } catch (err: any) {
       toast.error(err?.error?.message || 'Could not delete the project. Please try again.');
+      await Promise.all([refresh(), loadVideos(), loadAssets()]);
     } finally {
       setDeletingProjectId(null);
-      setProjectToDelete(null);
     }
   }
 
@@ -569,8 +619,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
     setRetryingProjectId(projectId);
     try {
       await Api.createVideoJobs(projectId, { overwrite: true });
-      await Api.processVideoJobs(projectId);
-      toast.success('Project rendering restarted');
+      toast.success('Project queued for rendering');
       await Promise.all([refresh(), loadVideos()]);
     } catch (err: any) {
       toast.error(err?.error?.message || 'Could not restart this project. Please try again.');
@@ -730,9 +779,9 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                       <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto pb-1 pr-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {[
                       { value: 'all' as const, label: 'All' },
-                      { value: 'active' as const, label: 'Rendering' },
-                      { value: 'queued' as const, label: 'Queued' },
-                      { value: 'ready' as const, label: 'Ready' },
+                      { value: 'active' as const, label: 'Processing' },
+                      { value: 'pending' as const, label: 'Pending' },
+                      { value: 'done' as const, label: 'Done' },
                       { value: 'failed' as const, label: 'Failed' },
                     ].map((filter, index) => (
                       <button
@@ -775,20 +824,21 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                   </div>
 
                   <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                  {filteredProjects.map((item: any, index) => {
+                  {paginatedProjects.map((item: any, index) => {
                     const statusMeta = getProjectStatusMeta(item.status);
                     const relatedVideos = videos.filter((video) => video.project.id === item.id);
                     const relatedVideo = relatedVideos[0] ?? item.latestVideo ?? null;
                     const tone = getProjectCardTone(index);
                     const title = item.title || item.name || 'Untitled project';
-                    const isReady = statusMeta.key === 'ready';
+                    const isReady = statusMeta.key === 'done';
                     const menuActions = getProjectMenuActions(statusMeta.key, Boolean(relatedVideo));
 
-                    const showOverlay = statusMeta.key === 'rendering' || statusMeta.key === 'queued';
+                    const showOverlay = statusMeta.key === 'processing' || statusMeta.key === 'pending';
                     const isMenuOpen = projectMenuOpenId === item.id;
 
                     const cardBody = (
                       <>
+                        <div className={`relative h-44 overflow-hidden rounded-t-[23px] border-b border-zinc-800 bg-gradient-to-br ${tone}`}>
                           {relatedVideo ? (
                             <MediaThumbnail
                               kind="video"
@@ -801,7 +851,6 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                               iconClassName="h-8 w-8 text-zinc-300/70"
                             />
                           ) : null}
-                        <div className={`relative h-44 overflow-hidden rounded-t-[23px] border-b border-zinc-800 bg-gradient-to-br ${tone}`}>
                           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_45%)]" />
                           <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-black/35 px-2 py-1 text-[11px] font-semibold text-zinc-100 backdrop-blur">
                             <Film className="h-3.5 w-3.5" />
@@ -813,18 +862,18 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                               <div className="max-w-[80%]">
                                 <p className="text-sm font-semibold text-zinc-100">{getProjectStatusText(statusMeta.key)}</p>
                                 <p className="mt-1 text-xs text-zinc-300/90">
-                                  {statusMeta.key === 'queued'
+                                  {statusMeta.key === 'pending'
                                     ? 'This task is in line and will start generating shortly.'
                                     : 'We are assembling the next video version for this task.'}
-                                </p>
-                              </div>
-                              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/15">
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-blue-400 via-violet-400 to-indigo-300 transition-[width] duration-500"
-                                  style={{ width: `${statusMeta.key === 'queued' ? 18 : statusMeta.progress ?? 0}%` }}
-                                />
-                              </div>
+                              </p>
                             </div>
+                            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/15">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-blue-400 via-violet-400 to-indigo-300 transition-[width] duration-500"
+                                  style={{ width: `${statusMeta.key === 'pending' ? 18 : statusMeta.progress ?? 0}%` }}
+                              />
+                            </div>
+                          </div>
                           ) : null}
                         </div>
 
@@ -852,7 +901,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                                 </button>
                                 {isMenuOpen ? (
                                   <div
-                                    className="absolute left-full top-0 z-20 ml-2 w-[156px] rounded-2xl border border-zinc-800 bg-zinc-950 p-1.5 text-zinc-100 shadow-2xl"
+                                    className="absolute right-0 top-full z-20 mt-2 w-[156px] rounded-2xl border border-zinc-800 bg-zinc-950 p-1.5 text-zinc-100 shadow-2xl"
                                     onClick={(event) => event.stopPropagation()}
                                   >
                                     <div className="space-y-1">
@@ -911,7 +960,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                             <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusMeta.badgeClass}`}>
                               {statusMeta.label}
                             </span>
-                            {relatedVideo && statusMeta.key === 'ready' ? (
+                            {relatedVideo && statusMeta.key === 'done' ? (
                               <span className="text-xs font-medium text-zinc-500">{formatBytes(relatedVideo.fileSizeBytes)}</span>
                             ) : null}
                           </div>
@@ -938,6 +987,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                     );
                   })}
                   </div>
+                  <PaginationControls page={projectPage} totalPages={totalProjectPages} onPageChange={setProjectPage} />
                 </div>
               )}
             </CardContent>
@@ -1003,8 +1053,9 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                 No assets found for this filter.
               </div>
             ) : (
+              <>
               <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                {groupedAssetProjects.map((group, index) => {
+                {paginatedAssetGroups.map((group, index) => {
                   const previewTone = getProjectCardTone(index);
                   const images = group.assets.filter((asset) => asset.type === 'image' || asset.mimeType.startsWith('image'));
                   const videosInGroup = group.assets.filter((asset) => asset.type === 'video' || asset.type === 'hook' || asset.mimeType.startsWith('video'));
@@ -1024,7 +1075,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                           <Grid2X2 className="h-3.5 w-3.5" />
                           {group.assets.length} asset{group.assets.length === 1 ? '' : 's'}
                         </div>
-                        <div className="absolute inset-0 grid grid-cols-2 gap-1 p-3">
+                          <div className="absolute inset-0 grid grid-cols-2 gap-1 p-3">
                           {previewAssets.map((assetPreview) => {
                             const isVideoAsset = assetPreview.type === 'video' || assetPreview.type === 'hook' || assetPreview.mimeType.startsWith('video');
                             return (
@@ -1079,6 +1130,8 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                   );
                 })}
               </div>
+              <PaginationControls page={assetPage} totalPages={totalAssetPages} onPageChange={setAssetPage} />
+              </>
             )}
           </CardContent>
         </Card>
@@ -1098,7 +1151,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
               Any tokens or generation credits already spent on this task will not be restored.
             </p>
           </div>
-          <div className="flex gap-2 sm:justify-end">
+          <div className="mt-4 flex gap-2 sm:justify-end">
             <Button variant="outline" onClick={() => setProjectToDelete(null)} disabled={!!deletingProjectId}>
               Cancel
             </Button>
