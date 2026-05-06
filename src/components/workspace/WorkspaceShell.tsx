@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Api } from '@/lib/api-client';
 import { useProjects } from '@/components/providers/ProjectsProvider';
+import { MediaThumbnail } from '@/components/media/MediaThumbnail';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -39,6 +40,8 @@ type FormState = {
 type VideoItem = {
   id: string;
   variantLabel: string | null;
+  storageUrl: string;
+  thumbnailUrl: string | null;
   durationSeconds: number;
   fileSizeBytes: string;
   downloadCount: number;
@@ -97,6 +100,12 @@ type ProjectItem = {
     createdAt?: string;
     updatedAt?: string;
   }>;
+  latestVideo?: {
+    id: string;
+    storageUrl: string;
+    thumbnailUrl: string | null;
+    fileSizeBytes: string;
+  } | null;
 };
 
 type PublishQueueItem = {
@@ -769,7 +778,7 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                   {filteredProjects.map((item: any, index) => {
                     const statusMeta = getProjectStatusMeta(item.status);
                     const relatedVideos = videos.filter((video) => video.project.id === item.id);
-                    const relatedVideo = relatedVideos[0] ?? null;
+                    const relatedVideo = relatedVideos[0] ?? item.latestVideo ?? null;
                     const tone = getProjectCardTone(index);
                     const title = item.title || item.name || 'Untitled project';
                     const isReady = statusMeta.key === 'ready';
@@ -780,6 +789,18 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
 
                     const cardBody = (
                       <>
+                          {relatedVideo ? (
+                            <MediaThumbnail
+                              kind="video"
+                              src={relatedVideo.storageUrl}
+                              poster={relatedVideo.thumbnailUrl}
+                              alt={`${title} preview`}
+                              className="absolute inset-0 h-full w-full rounded-t-[23px] object-cover"
+                              imageClassName="absolute inset-0 h-full w-full rounded-t-[23px] object-cover"
+                              videoClassName="absolute inset-0 h-full w-full rounded-t-[23px] object-cover"
+                              iconClassName="h-8 w-8 text-zinc-300/70"
+                            />
+                          ) : null}
                         <div className={`relative h-44 overflow-hidden rounded-t-[23px] border-b border-zinc-800 bg-gradient-to-br ${tone}`}>
                           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_45%)]" />
                           <div className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-lg bg-black/35 px-2 py-1 text-[11px] font-semibold text-zinc-100 backdrop-blur">
@@ -1009,13 +1030,16 @@ export function WorkspaceShell({ section = 'projects' }: { section?: 'projects' 
                             return (
                               <div
                                 key={assetPreview.id}
-                                className="flex items-center justify-center rounded-xl border border-white/10 bg-black/20 backdrop-blur-sm"
+                                className="overflow-hidden rounded-xl border border-white/10 bg-black/20 backdrop-blur-sm"
                               >
-                                {isVideoAsset ? (
-                                  <Video className="h-6 w-6 text-zinc-200/75" />
-                                ) : (
-                                  <ImageIcon className="h-6 w-6 text-zinc-200/75" />
-                                )}
+                                <MediaThumbnail
+                                  kind={isVideoAsset ? 'video' : 'image'}
+                                  src={isVideoAsset ? assetPreview.storageUrl : (assetPreview.thumbnailUrl || assetPreview.storageUrl)}
+                                  poster={isVideoAsset ? assetPreview.thumbnailUrl : null}
+                                  alt={assetPreview.filename}
+                                  className="h-full w-full object-cover"
+                                  iconClassName="h-6 w-6 text-zinc-200/75"
+                                />
                               </div>
                             );
                           })}

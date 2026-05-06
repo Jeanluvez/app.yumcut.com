@@ -23,6 +23,7 @@ import {
   Mic,
 } from 'lucide-react';
 import { Api } from '@/lib/api-client';
+import { MediaThumbnail } from '@/components/media/MediaThumbnail';
 import { toast } from 'sonner';
 
 type StepId = 1 | 2 | 3 | 4 | 5;
@@ -383,7 +384,7 @@ function MediaStep({
                 {libraryAssets.map((asset) => {
                   const isSelected = selectedIds.includes(asset.id);
                   const isVideo = asset.mimeType.startsWith('video') || asset.type === 'video';
-                  const previewUrl = isVideo ? asset.thumbnailUrl : (asset.thumbnailUrl || asset.storageUrl);
+                  const previewUrl = asset.thumbnailUrl || asset.storageUrl;
 
                   return (
                     <button
@@ -398,9 +399,12 @@ function MediaStep({
                     >
                       <div className="relative h-32 bg-zinc-800/80">
                         {previewUrl ? (
-                          <img
-                            src={previewUrl}
+                          <MediaThumbnail
+                            kind={isVideo ? 'video' : 'image'}
+                            src={isVideo ? asset.storageUrl : previewUrl}
+                            poster={isVideo ? asset.thumbnailUrl : null}
                             alt={asset.filename}
+                            iconClassName="h-6 w-6 text-zinc-600"
                             className="h-full w-full object-cover"
                           />
                         ) : (

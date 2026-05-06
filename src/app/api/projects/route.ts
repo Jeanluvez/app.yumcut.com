@@ -21,6 +21,16 @@ export const GET = withApiError(async function GET(req: NextRequest) {
       aspectRatio: true,
       promoInfo: true,
       createdAt: true,
+      videos: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: {
+          id: true,
+          storageUrl: true,
+          thumbnailUrl: true,
+          fileSizeBytes: true,
+        },
+      },
     },
   });
 
@@ -82,6 +92,14 @@ export const GET = withApiError(async function GET(req: NextRequest) {
               updatedAt: item.updatedAt ?? item.publishAt ?? '',
             })) ?? []
           : [],
+      latestVideo: project.videos[0]
+        ? {
+            id: project.videos[0].id,
+            storageUrl: project.videos[0].storageUrl,
+            thumbnailUrl: project.videos[0].thumbnailUrl,
+            fileSizeBytes: project.videos[0].fileSizeBytes.toString(),
+          }
+        : null,
       createdAt: project.createdAt.toISOString(),
     })),
   );
@@ -136,6 +154,7 @@ export const POST = withApiError(async function POST(req: NextRequest) {
       durationSeconds: created.durationSeconds,
       language: created.language,
       aspectRatio: created.aspectRatio,
+      latestVideo: null,
       createdAt: created.createdAt.toISOString(),
     },
     { status: 201 },

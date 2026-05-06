@@ -14,6 +14,8 @@ export const GET = withApiError(async function GET(_req: NextRequest) {
     select: {
       id: true,
       variantLabel: true,
+      storageUrl: true,
+      thumbnailUrl: true,
       durationSeconds: true,
       fileSizeBytes: true,
       downloadCount: true,
@@ -32,6 +34,8 @@ export const GET = withApiError(async function GET(_req: NextRequest) {
     videos.map((video) => ({
       id: video.id,
       variantLabel: video.variantLabel,
+      storageUrl: video.storageUrl,
+      thumbnailUrl: video.thumbnailUrl,
       durationSeconds: video.durationSeconds,
       fileSizeBytes: video.fileSizeBytes.toString(),
       downloadCount: video.downloadCount,
