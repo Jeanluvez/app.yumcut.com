@@ -81,6 +81,107 @@ export function useAuthActions() {
     await clerk.redirectToSignIn();
   }
 
+  async function sendEmailCode(
+    email: string,
+    options?: { mode?: 'sign-in' | 'sign-up'; password?: string },
+  ) {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      throw new Error('Email is required.');
+    }
+
+    if (options?.mode === 'sign-up') {
+      const signUp = clerk.client?.signUp;
+      if (!signUp) {
+        throw new Error('Clerk sign-up is not ready for email verification.');
+      }
+
+      const password = options?.password?.trim();
+      await signUp.create({
+        emailAddress: normalizedEmail,
+        ...(password ? { password } : {}),
+      });
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      return;
+    }
+
+    const signIn = clerk.client?.signIn;
+    if (!signIn) {
+      throw new Error('Clerk sign-in is not ready for email verification.');
+    }
+
+    await signIn.create({ identifier: normalizedEmail });
+    const emailCodeFactor = signIn.supportedFirstFactors?.find(
+      (factor) => factor.strategy === 'email_code' && 'emailAddressId' in factor,
+    );
+
+    if (!emailCodeFactor || !('emailAddressId' in emailCodeFactor)) {
+      throw new Error('Email code sign-in is not enabled in Clerk.');
+    }
+
+    await signIn.prepareFirstFactor({
+      strategy: 'email_code',
+      emailAddressId: emailCodeFactor.emailAddressId,
+    });
+  }
+
+  async function resendEmailCode(
+    email: string,
+    options?: { mode?: 'sign-in' | 'sign-up'; password?: string },
+  ) {
+    return sendEmailCode(email, options);
+  }
+
+  async function verifyEmailCode(code: string, options?: { mode?: 'sign-in' | 'sign-up' }) {
+    const normalizedCode = code.trim();
+    if (!normalizedCode) {
+      throw new Error('Verification code is required.');
+    }
+
+    if (options?.mode === 'sign-up') {
+      const signUp = clerk.client?.signUp;
+      if (!signUp) {
+        throw new Error('Clerk sign-up is not ready for email verification.');
+      }
+
+      const result = await signUp.attemptEmailAddressVerification({ code: normalizedCode });
+      if (result.status !== 'complete' || !result.createdSessionId) {
+        const missing = Array.isArray(result.missingFields) && result.missingFields.length > 0
+          ? ` Missing fields: ${result.missingFields.join(', ')}.`
+          : '';
+        const unverified = Array.isArray(result.unverifiedFields) && result.unverifiedFields.length > 0
+          ? ` Unverified fields: ${result.unverifiedFields.join(', ')}.`
+          : '';
+        throw new Error(`Email verification is not complete yet. Status: ${result.status}.${missing}${unverified}`);
+      }
+
+      await clerk.setActive({
+        session: result.createdSessionId,
+        redirectUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL || '/workspace',
+      });
+      return;
+    }
+
+    const signIn = clerk.client?.signIn;
+    if (!signIn) {
+      throw new Error('Clerk sign-in is not ready for email verification.');
+    }
+
+    const result = await signIn.attemptFirstFactor({
+      strategy: 'email_code',
+      code: normalizedCode,
+    });
+
+    if (result.status !== 'complete' || !result.createdSessionId) {
+      throw new Error(`Email verification is not complete yet. Status: ${result.status}.`);
+    }
+
+    await clerk.setActive({
+      session: result.createdSessionId,
+      redirectUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL || '/workspace',
+    });
+  }
+
   async function startSignOut(options?: { callbackUrl?: string; redirect?: boolean }) {
     if (options?.redirect === false) {
       await clerk.signOut();
@@ -95,6 +196,9 @@ export function useAuthActions() {
   return {
     ready: authLoaded && clerk.loaded && !!clerk.client,
     signIn: startSignIn,
+    sendEmailCode,
+    resendEmailCode,
+    verifyEmailCode,
     signOut: startSignOut,
   };
 }

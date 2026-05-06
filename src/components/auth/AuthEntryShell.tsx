@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Circle, Loader2, ShieldCheck, Sparkles } from "lucide-react";
-import { useState } from "react";
+import Link from "next/link";
+import { ArrowRight, Circle, Loader2, Mail, ShieldCheck, Sparkles } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { useAuthActions, useSession } from "@/lib/auth-client";
 import { SproklLogo } from "@/components/brand/SproklLogo";
@@ -15,29 +15,25 @@ type AuthEntryShellProps = {
 const COPY = {
   "sign-in": {
     eyebrow: "SHORT-FORM VIDEO ADS",
-    title: "Welcome back",
-    description:
-      "Sign in to your Sprokl account and continue building product-to-video workflows without leaving the workspace.",
+    title: "Log in to Sprokl",
     primaryCta: "Continue with Google",
     secondaryCta: "Continue with Apple",
+    emailCta: "Continue with Email",
     footerLabel: "Don't have an account?",
-    footerLink: "Create one free",
+    footerLink: "Sign up",
     footerHref: "/sign-up",
     loading: "Redirecting...",
-    subtitle: "Sign in to your Sprokl account",
   },
   "sign-up": {
     eyebrow: "SHORT-FORM VIDEO ADS",
-    title: "Start for free",
-    description:
-      "Create your Sprokl workspace and start generating videos with AI script support.",
+    title: "Sign up to Sprokl",
     primaryCta: "Sign up with Google",
     secondaryCta: "Sign up with Apple",
+    emailCta: "Continue with Email",
     footerLabel: "Already have an account?",
     footerLink: "Sign in",
     footerHref: "/sign-in",
     loading: "Redirecting...",
-    subtitle: "Use a real social login to create your account",
   },
 } as const;
 
@@ -58,11 +54,17 @@ const VALUE_POINTS = [
 
 export function AuthEntryShell({ mode }: AuthEntryShellProps) {
   const copy = COPY[mode];
-  const { signIn, ready } = useAuthActions();
+  const { signIn, ready, sendEmailCode, resendEmailCode, verifyEmailCode } = useAuthActions();
   const { status } = useSession();
   const [provider, setProvider] = useState<"google" | "apple" | null>(null);
+  const [emailFlowOpen, setEmailFlowOpen] = useState(false);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailStage, setEmailStage] = useState<"enter" | "code">("enter");
+  const [emailAction, setEmailAction] = useState<"send" | "verify" | null>(null);
 
-  async function handleAuth(nextProvider: "google" | "apple") {
+  async function handleOAuth(nextProvider: "google" | "apple") {
     if (provider || !ready) return;
     setProvider(nextProvider);
     const resetTimer = window.setTimeout(() => {
@@ -79,7 +81,64 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
     }
   }
 
-  const isLoading = provider !== null;
+  async function handleSendEmailCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!ready || emailAction) return;
+
+    const normalizedEmail = emailAddress.trim();
+    if (!normalizedEmail) {
+      toast.error("Enter an email address.");
+      return;
+    }
+
+    if (mode === "sign-up" && !emailPassword.trim()) {
+      toast.error("Enter a password to create your account.");
+      return;
+    }
+
+    setEmailAction("send");
+    try {
+      await sendEmailCode(normalizedEmail, { mode, password: emailPassword });
+      setEmailStage("code");
+      toast.success("Check your inbox for the verification code.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to send verification code.";
+      console.error("Failed to start Clerk email code flow.", error);
+      toast.error(message);
+    } finally {
+      setEmailAction(null);
+    }
+  }
+
+  async function handleVerifyEmailCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!ready || emailAction) return;
+
+    const normalizedCode = emailCode.trim();
+    if (!normalizedCode) {
+      toast.error("Enter the verification code.");
+      return;
+    }
+
+    setEmailAction("verify");
+    try {
+      await verifyEmailCode(normalizedCode, { mode });
+      toast.success(mode === "sign-up" ? "Email verified. Your account is ready." : "Signed in successfully.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to verify email code.";
+      console.error("Failed to verify Clerk email code.", error);
+      toast.error(message);
+    } finally {
+      setEmailAction(null);
+    }
+  }
+
+  function resetEmailFlow() {
+    setEmailStage("enter");
+    setEmailCode("");
+  }
+
+  const isLoading = provider !== null || emailAction !== null;
   const isSignUp = mode === "sign-up";
 
   return (
@@ -140,8 +199,8 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
                 </div>
               </div>
             </div>
-            </div>
-          </aside>
+          </div>
+        </aside>
 
         <section className="flex items-center justify-center px-4 py-10 sm:px-6 lg:px-10">
           <div className="w-full max-w-[460px]">
@@ -154,7 +213,7 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
                     !isSignUp ? "bg-zinc-700/80 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
                   ].join(" ")}
                 >
-                  Sign In
+                  Log In
                 </Link>
                 <Link
                   href="/sign-up"
@@ -163,49 +222,169 @@ export function AuthEntryShell({ mode }: AuthEntryShellProps) {
                     isSignUp ? "bg-zinc-700/80 text-zinc-100" : "text-zinc-500 hover:text-zinc-300",
                   ].join(" ")}
                 >
-                  Create Account
+                  Sign Up
                 </Link>
               </div>
             </div>
 
             <div className="mt-10">
               <h2 className="text-[26px] font-semibold tracking-tight text-zinc-100 sm:text-[30px]">{copy.title}</h2>
-              <p className="mt-2 text-[15px] text-zinc-500">{copy.subtitle}</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{copy.description}</p>
             </div>
 
             <div className="mt-8 grid gap-3">
               <button
                 type="button"
-                onClick={() => void handleAuth("google")}
+                onClick={() => void handleOAuth("google")}
                 disabled={isLoading || !ready}
                 className="inline-flex h-[52px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.08] px-6 text-sm font-medium text-zinc-100 transition-all duration-150 hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {provider === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {provider !== "google" ? (
-                  <Image src="/google.svg" alt="" width={16} height={16} className="h-4 w-4" />
-                ) : null}
+                {provider !== "google" ? <Image src="/google.svg" alt="" width={16} height={16} className="h-4 w-4" /> : null}
                 <span>{provider === "google" ? copy.loading : copy.primaryCta}</span>
               </button>
               <button
                 type="button"
-                onClick={() => void handleAuth("apple")}
+                onClick={() => void handleOAuth("apple")}
                 disabled={isLoading || !ready}
                 className="inline-flex h-[52px] items-center justify-center gap-2 rounded-2xl border border-white/10 bg-transparent px-6 text-sm font-medium text-zinc-300 transition-all duration-150 hover:border-white/18 hover:bg-white/[0.04] hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {provider === "apple" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {provider !== "apple" ? (
-                  <Image src="/apple.svg" alt="" width={16} height={16} className="h-4 w-4 invert" />
-                ) : null}
+                {provider !== "apple" ? <Image src="/apple.svg" alt="" width={16} height={16} className="h-4 w-4 invert" /> : null}
                 <span>{provider === "apple" ? copy.loading : copy.secondaryCta}</span>
               </button>
             </div>
 
             <div className="mt-7 flex items-center gap-4 text-xs uppercase tracking-[0.24em] text-zinc-600">
               <span className="h-px flex-1 bg-white/10" />
-              <span>Real auth only</span>
+              <span>OR</span>
               <span className="h-px flex-1 bg-white/10" />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setEmailFlowOpen(true)}
+              disabled={isLoading || !ready}
+              className={[
+                "mt-6 inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-2xl border px-6 text-sm font-medium transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-70",
+                emailFlowOpen
+                  ? "border-indigo-400/30 bg-indigo-500/12 text-zinc-100"
+                  : "border-white/10 bg-white/[0.03] text-zinc-300 hover:border-white/18 hover:bg-white/[0.06] hover:text-zinc-100",
+              ].join(" ")}
+            >
+              <Mail className="h-4 w-4" />
+              <span>{copy.emailCta}</span>
+            </button>
+
+            {emailFlowOpen ? (
+              <form
+                onSubmit={emailStage === "enter" ? handleSendEmailCode : handleVerifyEmailCode}
+                className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4"
+              >
+                {emailStage === "enter" ? (
+                  <div className="space-y-3">
+                    <label className="block text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">
+                      Email address
+                    </label>
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      value={emailAddress}
+                      onChange={(event) => setEmailAddress(event.target.value)}
+                      placeholder="name@example.com"
+                      className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-indigo-400/40 focus:bg-white/[0.06]"
+                    />
+                    {mode === "sign-up" ? (
+                      <div className="space-y-3">
+                        <label className="block text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">
+                          Password
+                        </label>
+                        <input
+                          type="password"
+                          autoComplete="new-password"
+                          value={emailPassword}
+                          onChange={(event) => setEmailPassword(event.target.value)}
+                          placeholder="Create a password"
+                          className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-indigo-400/40 focus:bg-white/[0.06]"
+                        />
+                      </div>
+                    ) : null}
+                    {isSignUp ? <div id="clerk-captcha" className="min-h-[78px]" /> : null}
+                    <div className="flex justify-end">
+                      <button
+                        type="submit"
+                        disabled={emailAction !== null || !ready}
+                        className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.08] px-4 text-sm font-medium text-zinc-100 transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {emailAction === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                        <span>{emailAction === "send" ? "Sending..." : "Send code"}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-4 py-4">
+                      <p className="text-sm font-medium text-zinc-100">Enter your verification code</p>
+                      <p className="mt-1 text-sm leading-6 text-zinc-400">
+                        We sent a verification code to <span className="text-zinc-200">{emailAddress}</span>. Enter it here to continue.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <label className="block text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-500">
+                        Verification code
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        value={emailCode}
+                        onChange={(event) => setEmailCode(event.target.value)}
+                        placeholder="123456"
+                        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-indigo-400/40 focus:bg-white/[0.06]"
+                      />
+                      <button
+                        type="submit"
+                        disabled={emailAction !== null || !ready}
+                        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.08] px-4 text-sm font-medium text-zinc-100 transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {emailAction === "verify" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        <span>{emailAction === "verify" ? "Verifying..." : "Verify code"}</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={resetEmailFlow}
+                        className="text-sm font-medium text-zinc-400 transition hover:text-zinc-200"
+                      >
+                        Change email
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!ready || emailAction) return;
+                          setEmailAction("send");
+                          try {
+                            await resendEmailCode(emailAddress, { mode, password: emailPassword });
+                            toast.success("Verification code resent.");
+                          } catch (error) {
+                            const message = error instanceof Error ? error.message : "Unable to resend verification code.";
+                            console.error("Failed to resend Clerk verification code.", error);
+                            toast.error(message);
+                          } finally {
+                            setEmailAction(null);
+                          }
+                        }}
+                        disabled={emailAction !== null || !ready}
+                        className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.08] px-4 text-sm font-medium text-zinc-100 transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {emailAction === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        <span>{emailAction === "send" ? "Resending..." : "Resend code"}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </form>
+            ) : null}
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-500">
               <span>{copy.footerLabel}</span>
