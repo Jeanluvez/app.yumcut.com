@@ -412,6 +412,7 @@ function MediaStep({
   const libraryAssets = assets.filter((item) => item.type !== 'hook');
   const totalLibraryPages = Math.max(1, Math.ceil(libraryAssets.length / 9));
   const paginatedLibraryAssets = libraryAssets.slice((libraryPage - 1) * 9, (libraryPage - 1) * 9 + 9);
+  const canContinue = selectedIds.length + localUploads.length >= 1;
 
   useEffect(() => {
     if (activeTab !== 'library') return;
@@ -589,7 +590,12 @@ function MediaStep({
               <button
                 type="button"
                 onClick={onNext}
-                className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                disabled={!canContinue}
+                className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                  canContinue
+                    ? 'gradient-primary text-white hover:opacity-90'
+                    : 'cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-500'
+                }`}
               >
                 Continue to Product Details
               </button>
@@ -659,7 +665,12 @@ function MediaStep({
                 <button
                   type="button"
                   onClick={onNext}
-                  className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+                  disabled={!canContinue}
+                  className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                    canContinue
+                      ? 'gradient-primary text-white hover:opacity-90'
+                      : 'cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-500'
+                  }`}
                 >
                   Continue to Product Details
                 </button>
@@ -683,6 +694,9 @@ function ProductBriefStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const validationError = validateProductBriefDraft(draft);
+  const canContinue = !validationError;
+
   return (
     <div className="space-y-6">
     <StepPanel
@@ -808,14 +822,18 @@ function ProductBriefStep({
           <button
             type="button"
             onClick={() => {
-              const errorMessage = validateProductBriefDraft(draft);
-              if (errorMessage) {
-                toast.error(errorMessage);
+              if (validationError) {
+                toast.error(validationError);
                 return;
               }
               onNext();
             }}
-            className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+            disabled={!canContinue}
+            className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+              canContinue
+                ? 'gradient-primary text-white hover:opacity-90'
+                : 'cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-500'
+            }`}
           >
             Continue to Video Settings
           </button>
@@ -837,6 +855,8 @@ function SettingsStep({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const canContinue = Boolean(draft.aspectRatio && draft.duration && draft.language && draft.voice && draft.music);
+
   return (
     <StepPanel
       eyebrow="Step 03"
@@ -1001,7 +1021,12 @@ function SettingsStep({
           <button
             type="button"
             onClick={onNext}
-            className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+            disabled={!canContinue}
+            className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+              canContinue
+                ? 'gradient-primary text-white hover:opacity-90'
+                : 'cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-500'
+            }`}
           >
             Continue to Scripts
           </button>
@@ -1040,6 +1065,7 @@ function ScriptsStep({
   const autoGenerateProjectIdRef = useRef<string | null>(null);
   const isLoadingScripts =
     isBootstrapping || isGenerating || !projectId || scriptsLoadedForProjectId !== projectId || scripts.length === 0;
+  const canContinue = !isLoadingScripts && selectedIds.length > 0;
 
   useEffect(() => {
     if (!projectId || scripts.length > 0) return;
@@ -1332,7 +1358,12 @@ function ScriptsStep({
           <button
             type="button"
             onClick={onNext}
-            className="rounded-xl gradient-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+            disabled={!canContinue}
+            className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+              canContinue
+                ? 'gradient-primary text-white hover:opacity-90'
+                : 'cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-500'
+            }`}
           >
             Continue to Review
           </button>
@@ -1370,6 +1401,7 @@ function RenderStep({
   const selectedVoice = VOICES.find((item) => item.value === settings.voice);
   const selectedMusic = MUSIC_OPTIONS.find((item) => item.value === settings.music);
   const totalSelectedMediaCount = selectedAssetCount + localUploadCount;
+  const canCreate = totalSelectedMediaCount >= 1 && selectedScripts.length > 0 && !submitting;
 
   return (
     <StepPanel
@@ -1504,8 +1536,12 @@ function RenderStep({
           <button
             type="button"
             onClick={onCreate}
-            disabled={submitting}
-            className="rounded-2xl gradient-primary px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+            disabled={!canCreate}
+            className={`rounded-2xl px-6 py-3 text-sm font-semibold transition ${
+              canCreate
+                ? 'gradient-primary text-white hover:opacity-90'
+                : 'cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-500'
+            }`}
           >
             {submitting ? 'Starting render...' : 'Start Rendering'}
           </button>
@@ -1631,8 +1667,8 @@ export function CreateVideoTaskShell() {
 
   function validateStep(step: StepId) {
     if (step === 1) {
-      if (selectedMediaCount < 2) {
-        toast.error('Select at least 2 media files before continuing.');
+      if (selectedMediaCount < 1) {
+        toast.error('Select at least 1 media file before continuing.');
         return false;
       }
       return true;
