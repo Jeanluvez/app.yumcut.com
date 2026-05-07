@@ -4,6 +4,7 @@ import { authenticateApiRequest } from '@/server/api-user';
 import { prisma } from '@/server/db';
 import { conflict, error, notFound, ok, unauthorized } from '@/server/http';
 import { withApiError } from '@/server/errors';
+import { enqueueQueuedVideoJob } from '@/server/video-jobs/queue';
 
 type Params = { projectId: string };
 
@@ -33,12 +34,25 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
     where: { id: projectId, userId: auth.userId },
     select: {
       id: true,
+      userId: true,
       selectedAssetIds: true,
       hookAssetId: true,
+      durationSeconds: true,
+      aspectRatio: true,
+      language: true,
+      promoEnabled: true,
+      promoInfo: true,
       scripts: {
         where: { isSelected: true },
         orderBy: { sortOrder: 'asc' },
-        select: { id: true, sortOrder: true, styleLabel: true },
+        select: {
+          id: true,
+          sortOrder: true,
+          styleLabel: true,
+          hookText: true,
+          bodyText: true,
+          ctaText: true,
+        },
       },
       videoJobs: {
         select: { id: true, status: true },
@@ -94,10 +108,95 @@ export const POST = withApiError(async function POST(req: NextRequest, { params 
         select: {
           styleLabel: true,
           sortOrder: true,
+          hookText: true,
+          bodyText: true,
+          ctaText: true,
         },
       },
     },
   });
+
+  const assets = await prisma.asset.findMany({
+    where: {
+      projectId: project.id,
+      userId: auth.userId,
+      id: { in: [...project.selectedAssetIds, ...(project.hookAssetId ? [project.hookAssetId] : [])] },
+    },
+    select: {
+      id: true,
+      storageUrl: true,
+      thumbnailUrl: true,
+      type: true,
+      filename: true,
+      mimeType: true,
+    },
+  });
+
+  const assetById = new Map(assets.map((asset) => [asset.id, asset] as const));
+  const selectedAssets = project.selectedAssetIds
+    .map((id) => assetById.get(id))
+    .filter((asset): asset is NonNullable<typeof asset> => !!asset)
+    .map((asset) => ({
+      id: asset.id,
+      storageUrl: asset.storageUrl,
+      mimeType: asset.mimeType,
+      type: asset.type,
+      animateImage: asset.type === 'image',
+    }));
+  const hookAsset = project.hookAssetId ? assetById.get(project.hookAssetId) ?? null : null;
+  const renderAssets = [
+    ...(hookAsset
+      ? [{
+          id: hookAsset.id,
+          storageUrl: hookAsset.storageUrl,
+          mimeType: hookAsset.mimeType,
+          type: hookAsset.type,
+          animateImage: hookAsset.type === 'image',
+        }]
+      : []),
+    ...selectedAssets,
+  ];
+
+  try {
+    await Promise.all(
+      jobs.map((job) =>
+        enqueueQueuedVideoJob({
+          jobId: job.id,
+          projectId: project.id,
+          taskId: project.id,
+          userId: project.userId,
+          language: project.language,
+          aspectRatio: project.aspectRatio,
+          durationSeconds: project.durationSeconds,
+          outputFileName: `${project.id}-${job.variantIndex}.mp4`,
+          assets: renderAssets,
+          script: {
+            styleLabel: job.script.styleLabel || `Variant ${job.variantIndex}`,
+            hookText: job.script.hookText,
+            bodyText: job.script.bodyText,
+            ctaText: job.script.ctaText,
+          },
+          promoEnabled: project.promoEnabled,
+          promoInfo: (project.promoInfo as Record<string, unknown> | null) ?? null,
+          renderOptions: {
+            captionsEnabled: true,
+            backgroundMusicEnabled: true,
+            stylePreset: 'balanced',
+            useHookClip: true,
+            animateImages: true,
+            shuffleVideoSlices: true,
+          },
+        }),
+      ),
+    );
+  } catch (enqueueError) {
+    await prisma.videoJob.deleteMany({ where: { projectId: project.id } });
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { status: 'draft' },
+    });
+    throw enqueueError;
+  }
 
   return ok({
     jobs: jobs.map((job) => ({
